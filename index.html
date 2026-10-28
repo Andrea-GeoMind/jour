@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Jour">
+<meta name="theme-color" content="#0f1115">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.png">
+<title>Jour</title>
+<style>
+:root{--bg:#0f1115;--card:#171a21;--card2:#1e222b;--line:#262b36;--txt:#e9ecf1;--mut:#8b93a3;--acc:#5b8def;--ok:#3ec28f;--ko:#ef6b6b;--warn:#f0b64a;--fixed:#3a404d;--radius:14px}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,system-ui,sans-serif;height:100%;overscroll-behavior:none}
+body{display:flex;flex-direction:column;height:100dvh}
+header{padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);flex:none}
+header h1{font-size:17px;margin:0;font-weight:700}
+header .sub{color:var(--mut);font-size:13px}
+.chip{font-size:12px;padding:4px 9px;border-radius:999px;background:var(--card2);color:var(--mut);border:1px solid var(--line)}
+.chip.ok{color:var(--ok);border-color:#2a4a3e}.chip.ko{color:var(--warn);border-color:#4a3e2a}
+main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 16px 24px}
+.view{display:none}.view.on{display:block}
+.daynav{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.daynav button{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:6px 12px;font-size:15px}
+.daynav .d{font-weight:700;font-size:16px;text-transform:capitalize}
+.meta{color:var(--mut);font-size:13px;margin:0 0 10px}
+.tl{display:flex;flex-direction:column;gap:6px}
+.blk{display:flex;gap:10px;background:var(--card);border-radius:var(--radius);padding:10px 12px;border-left:4px solid var(--acc);align-items:center}
+.blk.fixed{border-left-color:var(--fixed);color:var(--mut);background:transparent;border:1px solid var(--line);border-left:4px solid var(--fixed)}
+.blk.now{outline:2px solid var(--acc);outline-offset:-2px}
+.blk .t{width:92px;flex:none;font-variant-numeric:tabular-nums;font-size:13px;color:var(--mut)}
+.blk .n{flex:1;font-weight:600}.blk.fixed .n{font-weight:500}
+.blk .n small{display:block;color:var(--mut);font-weight:400;font-size:12px}
+.blk .st{font-size:12px;padding:3px 8px;border-radius:999px;background:var(--card2);color:var(--mut)}
+.st.done{color:var(--ok)}.st.skip{color:var(--ko)}.st.ask{color:var(--warn)}
+.nowline{display:flex;align-items:center;gap:8px;color:var(--acc);font-size:12px;margin:2px 0}
+.nowline:after{content:"";flex:1;height:1px;background:var(--acc)}
+.bar{flex:none;border-top:1px solid var(--line);background:var(--bg);padding:8px 12px}
+.bar form{display:flex;gap:8px}
+.bar input{flex:1;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:12px;padding:12px 14px;font-size:16px;outline:none}
+.bar button{background:var(--acc);color:#fff;border:0;border-radius:12px;padding:0 16px;font-size:16px;font-weight:700}
+.confirm{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px;display:none}
+.confirm.on{display:block}
+.confirm p{margin:0 0 8px;font-size:15px}
+.confirm .acts{display:flex;gap:8px}
+.confirm .acts button{flex:1;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--txt);font-size:15px}
+.confirm .acts button.p{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
+nav{flex:none;display:flex;border-top:1px solid var(--line);background:var(--bg);padding:6px 0 calc(env(safe-area-inset-bottom) + 6px)}
+nav button{flex:1;background:none;border:0;color:var(--mut);font-size:12px;padding:6px 0;display:flex;flex-direction:column;gap:2px;align-items:center}
+nav button.on{color:var(--acc)}
+nav button b{font-size:18px;font-weight:400}
+/* semaine */
+.wk{display:flex;flex-direction:column;gap:8px}
+.wd{background:var(--card);border-radius:var(--radius);padding:10px 12px}
+.wd .h{display:flex;justify-content:space-between;font-weight:700;text-transform:capitalize}
+.wd .h span{color:var(--mut);font-weight:400;font-size:13px;text-transform:none}
+.wd .r{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.tag{font-size:12px;padding:3px 8px;border-radius:999px;background:var(--card2);border-left:3px solid var(--acc)}
+/* bilan */
+.row{background:var(--card);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px}
+.row .h{display:flex;justify-content:space-between;font-weight:600}
+.row .h span{color:var(--mut);font-weight:400;font-size:13px}
+.meter{height:8px;background:var(--card2);border-radius:4px;margin-top:8px;overflow:hidden;display:flex}
+.meter i{display:block;height:100%}
+.meter .d{background:var(--ok)}.meter .k{background:var(--ko)}.meter .u{background:var(--line)}
+.legend{font-size:12px;color:var(--mut);margin-top:6px}
+/* réglages */
+h2{font-size:14px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin:18px 0 8px}
+.card{background:var(--card);border-radius:var(--radius);padding:12px}
+.f{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.f label{flex:1;font-size:15px}
+.f input,.f select{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:8px 10px;font-size:15px;min-width:0}
+.f input[type=time]{width:110px}.f input[type=number]{width:80px}.f input[type=text]{flex:1}
+.f input[type=checkbox]{width:20px;height:20px}
+.btn{display:block;width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--card2);color:var(--txt);font-size:15px;margin-top:8px}
+.btn.p{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
+.btn.danger{color:var(--ko)}
+.small{font-size:13px;color:var(--mut)}
+.li{display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
+.li input[type=text]{flex:1 1 120px}.li input[type=number]{width:64px}.li input[type=time],.li input[type=date]{width:118px}
+.li select{width:92px}
+.li .x{background:none;border:0;color:var(--ko);font-size:20px;padding:0 6px}
+.empty{color:var(--mut);text-align:center;padding:30px 10px;font-size:14px}
+.toast{position:fixed;left:50%;bottom:140px;transform:translateX(-50%);background:var(--card2);border:1px solid var(--line);padding:8px 14px;border-radius:999px;font-size:13px;opacity:0;transition:.2s;pointer-events:none}
+.toast.on{opacity:1}
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-end;z-index:9}
+.sheet.on{display:flex}
+.sh{background:var(--card);width:100%;border-radius:18px 18px 0 0;padding:14px 16px calc(env(safe-area-inset-bottom) + 14px)}
+.shh{font-weight:700;margin-bottom:8px}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>Jour</h1><div class="sub" id="hsub"></div></div>
+  <span class="chip" id="gchip" onclick="onChip()">Google</span>
+</header>
+<main>
+  <section class="view on" id="v-jour">
+    <div class="daynav"><button onclick="moveDay(-1)">‹</button><div class="d" id="dlabel"></div><button onclick="moveDay(1)">›</button></div>
+    <p class="meta" id="dmeta"></p>
+    <div class="tl" id="tl"></div>
+  </section>
+  <section class="view" id="v-semaine"><div class="wk" id="wk"></div></section>
+  <section class="view" id="v-bilan"><div id="bilan"></div></section>
+  <section class="view" id="v-reglages"><div id="reg"></div></section>
+</main>
+<div class="bar">
+  <div class="confirm" id="confirm"><p id="ctext"></p><div class="acts"><button onclick="cancelAction()">Annuler</button><button class="p" onclick="applyAction()">Valider</button></div></div>
+  <form onsubmit="return onDictate(event)"><input id="din" placeholder="Dicte ici (micro du clavier)…" autocomplete="off" enterkeyhint="send"><button type="submit">↑</button></form>
+</div>
+<nav>
+  <button class="on" onclick="go('jour',this)"><b>▤</b>Jour</button>
+  <button onclick="go('semaine',this)"><b>▦</b>Semaine</button>
+  <button onclick="go('bilan',this)"><b>✓</b>Bilan</button>
+  <button onclick="go('reglages',this)"><b>⚙</b>Réglages</button>
+</nav>
+<div class="toast" id="toast"></div>
+<div class="sheet" id="sheet" onclick="if(event.target===this)sheetPick('close')"><div class="sh">
+  <div class="shh" id="shtitle"></div>
+  <button class="btn" style="color:var(--ok)" onclick="sheetPick('done')">Fait</button>
+  <button class="btn" style="color:var(--ko)" onclick="sheetPick('skip')">Sauté</button>
+  <button class="btn" onclick="sheetPick('none')">Effacer le statut</button>
+  <button class="btn" onclick="sheetPick('close')">Annuler</button>
+</div></div>
+<script src="planner.js"></script>
+<script>
+// ====================== état ======================
+const P = Planner, MIN = 60000;
+const LS = k => { try { return JSON.parse(localStorage.getItem('jour.' + k)); } catch (e) { return null; } };
+const SV = (k, v) => localStorage.setItem('jour.' + k, JSON.stringify(v));
+const uid = () => Math.random().toString(36).slice(2, 9);
+const DEFAULT_CFG = {
+  wake: '08:00', bed: '00:00', windDown: 30,
+  routines: [{ name: 'Déjeuner', start: '12:30', dur: 45 }, { name: 'Dîner', start: '19:30', dur: 45 }],
+  projects: [
+    { id: 'libre', name: 'Libre', kind: 'libre', min: 90, color: '#8b93a3', gcolor: '8' },
+    { id: 'poker', name: 'Poker', kind: 'daily', min: 60, max: 60, color: '#f0b64a', gcolor: '5' },
+    { id: 'geomind', name: 'GeoMind', kind: 'fill', max: 300, chunk: 120, minBlock: 45, color: '#5b8def', gcolor: '9' },
+    { id: 'sport', name: 'Sport', kind: 'daily', min: 45, max: 45, color: '#3ec28f', gcolor: '10', off: true },
+  ],
+  google: { clientId: '', sourceCals: [], planCal: '' },
+};
+let cfg = Object.assign({}, DEFAULT_CFG, LS('cfg') || {});
+let tasks = LS('tasks') || [];
+let extras = LS('extras') || [];
+let overrides = LS('overrides') || {};
+let status = LS('status') || {};
+let plan = LS('plan') || {};
+let events = LS('events') || { fetchedAt: 0, items: [], cals: [] };
+let gtok = LS('gtoken') || null;
+let viewDate = null, pending = null;
+const saveAll = () => { SV('cfg', cfg); SV('tasks', tasks); SV('extras', extras); SV('overrides', overrides); SV('status', status); SV('plan', plan); };
+
+// ====================== planification ======================
+function todayStr() { return Object.keys(P.planWeek({ cfg, now: Date.now(), events: [], extras: [], tasks: [], overrides: {} }, 1))[0]; }
+function replan() {
+  const now = Date.now();
+  const ctx = { cfg, now, events: events.items.map(e => ({ s: e.s, e: e.e, title: e.title })), extras, tasks, overrides };
+  const fresh = P.planWeek(ctx, 7);
+  const today = Object.keys(fresh)[0];
+  // on garde l'historique : blocs déjà passés aujourd'hui + jours passés
+  for (const ds of Object.keys(fresh)) {
+    const old = plan[ds];
+    if (ds === today && old) {
+      const past = old.blocks.filter(b => b.s < now).map(b => b.e > now ? Object.assign({}, b, { e: Math.ceil(now / (5 * MIN)) * 5 * MIN }) : b).filter(b => b.e > b.s);
+      fresh[ds].blocks = past.concat(fresh[ds].blocks.filter(b => b.s >= now)).sort((a, b) => a.s - b.s);
+    }
+  }
+  for (const ds of Object.keys(plan)) if (ds < today && ds >= P.ymd(P.addDays(new Date(now), -21))) fresh[ds] = plan[ds];
+  plan = fresh;
+  SV('plan', plan); SV('lastPlan', now);
+  if (!viewDate || !plan[viewDate]) viewDate = (plan[today].window.end > now) ? today : Object.keys(fresh).sort()[Object.keys(fresh).sort().indexOf(today) + 1] || today;
+  // ménage des statuts trop vieux
+  const cut = P.ymd(P.addDays(new Date(now), -21));
+  for (const k of Object.keys(status)) if (k.slice(0, 10) < cut) delete status[k];
+}
+const bkey = b => b.date + '|' + b.s + '|' + (b.ref || b.title);
+
+// ====================== rendu ======================
+const fmt = t => { const x = new Date(t); return P.pad(x.getHours()) + ':' + P.pad(x.getMinutes()); };
+const dur = (s, e) => { const m = Math.round((e - s) / MIN); return m >= 60 ? Math.floor(m / 60) + 'h' + (m % 60 ? P.pad(m % 60) : '') : m + ' min'; };
+const dlong = ds => new Date(ds + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const proj = id => (cfg.projects || []).find(p => p.id === id);
+
+function render() { renderHeader(); renderDay(); renderWeek(); renderBilan(); }
+function renderHeader() {
+  const chip = document.getElementById('gchip');
+  if (!cfg.google.clientId) { chip.textContent = 'Google : à configurer'; chip.className = 'chip'; }
+  else if (tokenOk()) { chip.textContent = 'Google ✓'; chip.className = 'chip ok'; }
+  else { chip.textContent = 'Reconnecter Google'; chip.className = 'chip ko'; }
+  const n = events.fetchedAt ? 'agenda lu ' + new Date(events.fetchedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : 'agenda non lu';
+  document.getElementById('hsub').textContent = n;
+}
+function renderDay() {
+  const day = plan[viewDate]; const tl = document.getElementById('tl'); const now = Date.now();
+  document.getElementById('dlabel').textContent = dlong(viewDate);
+  if (!day) { tl.innerHTML = '<div class="empty">Rien de planifié.</div>'; return; }
+  const isToday = viewDate === todayStr();
+  const work = day.blocks.filter(b => b.kind !== 'libre').reduce((a, b) => a + (b.e - b.s), 0);
+  const libre = day.blocks.filter(b => b.kind === 'libre').reduce((a, b) => a + (b.e - b.s), 0);
+  document.getElementById('dmeta').textContent = dur(0, work) + ' de boulot · ' + dur(0, libre) + ' libre · coucher ' + fmt(day.window.end + cfg.windDown * MIN);
+  const items = day.fixed.map(f => Object.assign({ fixed: true }, f)).concat(day.blocks.map(b => Object.assign({ date: viewDate }, b))).sort((a, b) => a.s - b.s);
+  let html = '', nowDone = false;
+  for (const it of items) {
+    if (!nowDone && isToday && it.s > now && now >= day.window.start) { html += '<div class="nowline">maintenant ' + fmt(now) + '</div>'; nowDone = true; }
+    if (it.fixed) { html += '<div class="blk fixed"><div class="t">' + fmt(it.s) + '–' + fmt(it.e) + '</div><div class="n">' + esc(it.title) + '<small>' + ({ fixed: 'agenda', routine: 'routine', imprevu: 'imprévu' }[it.kind]) + ' · ' + dur(it.s, it.e) + '</small></div></div>'; continue; }
+    const k = bkey(it), st = status[k], cur = now >= it.s && now < it.e;
+    let stHtml = st === 'done' ? '<span class="st done">fait</span>' : st === 'skip' ? '<span class="st skip">sauté</span>' : (it.e <= now ? '<span class="st ask">?</span>' : (cur ? '<span class="st">en cours</span>' : ''));
+    const color = it.color || (proj(it.ref) || {}).color || (it.kind === 'task' ? '#ef6b6b' : '#5b8def');
+    html += '<div class="blk' + (cur ? ' now' : '') + '" style="border-left-color:' + color + '" onclick="tapBlock(\'' + k + '\')"><div class="t">' + fmt(it.s) + '–' + fmt(it.e) + '</div><div class="n">' + esc(it.title) + '<small>' + dur(it.s, it.e) + (it.kind === 'task' ? ' · deadline' : '') + '</small></div>' + stHtml + '</div>';
+  }
+  if (isToday && now > day.window.end && !day.blocks.some(b => b.e > now)) html += '<div class="empty">Journée terminée. Coucher prévu à ' + fmt(day.window.end + cfg.windDown * MIN) + '.</div>';
+  tl.innerHTML = html || '<div class="empty">Journée vide.</div>';
+}
+function renderWeek() {
+  const el = document.getElementById('wk'); const days = Object.keys(plan).filter(d => d >= todayStr()).sort();
+  el.innerHTML = days.map(ds => {
+    const d = plan[ds]; const per = {};
+    for (const b of d.blocks) per[b.title] = (per[b.title] || 0) + (b.e - b.s);
+    const fixedMin = d.fixed.filter(f => f.kind === 'fixed').reduce((a, f) => a + (f.e - f.s), 0);
+    return '<div class="wd" onclick="viewDate=\'' + ds + '\';go(\'jour\',document.querySelector(\'nav button\'))"><div class="h">' + dlong(ds) + '<span>' + (fixedMin ? dur(0, fixedMin) + ' d\'agenda' : 'rien dans l\'agenda') + '</span></div><div class="r">' +
+      Object.keys(per).map(t => { const b = d.blocks.find(x => x.title === t); const c = b.color || (proj(b.ref) || {}).color || '#5b8def'; return '<span class="tag" style="border-left-color:' + c + '">' + esc(t) + ' ' + dur(0, per[t]) + '</span>'; }).join('') + '</div></div>';
+  }).join('') || '<div class="empty">Rien de planifié.</div>';
+}
+function renderBilan() {
+  const el = document.getElementById('bilan'); const now = Date.now();
+  const from = P.ymd(P.addDays(new Date(now), -6)); const agg = {};
+  for (const ds of Object.keys(plan)) {
+    if (ds < from || ds > todayStr()) continue;
+    for (const b of plan[ds].blocks) {
+      if (b.kind === 'libre' || b.e > now) continue;
+      const k = b.ref || b.title; agg[k] = agg[k] || { name: b.title, done: 0, skip: 0, unk: 0 };
+      const st = status[bkey(Object.assign({ date: ds }, b))]; const m = (b.e - b.s) / MIN;
+      if (st === 'done') agg[k].done += m; else if (st === 'skip') agg[k].skip += m; else agg[k].unk += m;
+    }
+  }
+  const keys = Object.keys(agg);
+  if (!keys.length) { el.innerHTML = '<div class="empty">Pas encore de blocs passés sur les 7 derniers jours.</div>'; return; }
+  let tot = { done: 0, skip: 0, unk: 0 };
+  el.innerHTML = keys.map(k => {
+    const a = agg[k]; const all = a.done + a.skip + a.unk; tot.done += a.done; tot.skip += a.skip; tot.unk += a.unk;
+    const pct = a.done + a.skip ? Math.round(100 * a.done / (a.done + a.skip)) : null;
+    return '<div class="row"><div class="h">' + esc(a.name) + '<span>' + (pct == null ? 'rien de renseigné' : pct + ' % tenu') + '</span></div><div class="meter"><i class="d" style="width:' + (100 * a.done / all) + '%"></i><i class="k" style="width:' + (100 * a.skip / all) + '%"></i><i class="u" style="width:' + (100 * a.unk / all) + '%"></i></div><div class="legend">' + dur(0, a.done * MIN) + ' fait · ' + dur(0, a.skip * MIN) + ' sauté · ' + dur(0, a.unk * MIN) + ' non renseigné</div></div>';
+  }).join('') + '<p class="small">7 derniers jours. Un bloc passé sans réponse compte « non renseigné » : touche-le dans Jour pour dire fait ou sauté.</p>';
+}
+
+// ====================== interactions ======================
+function go(v, btn) {
+  document.querySelectorAll('.view').forEach(x => x.classList.toggle('on', x.id === 'v-' + v));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('on'));
+  (btn || document.querySelector('nav button')).classList.add('on');
+  if (v === 'reglages') renderSettings(); else render();
+}
+function moveDay(n) { const ds = P.ymd(P.addDays(new Date(viewDate + 'T12:00:00'), n)); viewDate = ds; renderDay(); }
+function toast(m) { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('on'); setTimeout(() => t.classList.remove('on'), 2200); }
+function tapBlock(k) {
+  const [ds, s] = k.split('|'); const b = (plan[ds] || { blocks: [] }).blocks.find(x => String(x.s) === s);
+  if (!b) return;
+  const sh = document.getElementById('sheet');
+  document.getElementById('shtitle').textContent = b.title + ' · ' + fmt(b.s) + '–' + fmt(b.e);
+  sh.dataset.key = k; sh.classList.add('on');
+}
+function sheetPick(st) { const sh = document.getElementById('sheet'); const k = sh.dataset.key; sh.classList.remove('on'); if (st === 'close') return; setStatus(k, st === 'none' ? null : st); }
+function setStatus(k, st) {
+  const [ds, s] = k.split('|'); const b = plan[ds].blocks.find(x => String(x.s) === s);
+  const prev = status[k]; const m = (b.e - b.s) / MIN;
+  if (b.kind === 'task') { const t = tasks.find(t => t.id === b.ref); if (t) { if (prev === 'done') t.doneMin = Math.max(0, (t.doneMin || 0) - m); if (st === 'done') t.doneMin = (t.doneMin || 0) + m; if (t.doneMin >= t.minutes) t.done = true; else t.done = false; } }
+  if (st) status[k] = st; else delete status[k];
+  saveAll(); replan(); saveAll(); render(); sync();
+}
+function onDictate(ev) {
+  ev.preventDefault();
+  const inp = document.getElementById('din'); const text = inp.value.trim(); if (!text) return false;
+  pending = P.parse(text, { cfg, now: Date.now(), tasks });
+  const c = document.getElementById('confirm'); document.getElementById('ctext').textContent = pending.summary; c.classList.add('on');
+  c.querySelector('.p').style.display = pending.action === 'unknown' ? 'none' : '';
+  inp.blur();
+  return false;
+}
+function cancelAction() { pending = null; document.getElementById('confirm').classList.remove('on'); }
+function applyAction() {
+  const a = pending; if (!a) return; cancelAction(); document.getElementById('din').value = '';
+  const now = Date.now(); const today = todayStr();
+  if (a.action === 'extra') extras.push({ id: uid(), date: a.date, s: a.s, e: a.e, title: a.title });
+  else if (a.action === 'task') tasks.push({ id: uid(), name: a.title, minutes: a.minutes, deadline: a.deadline, doneMin: 0 });
+  else if (a.action === 'override') { overrides[a.date] = overrides[a.date] || {}; if (a.field === 'skip') { overrides[a.date].skip = (overrides[a.date].skip || []).concat([a.value]); } else overrides[a.date][a.field] = a.value; }
+  else if (a.action === 'done' || a.action === 'skip') {
+    const d = plan[today]; if (!d) return;
+    let cands = d.blocks.filter(b => b.kind !== 'libre');
+    if (a.target) cands = cands.filter(b => b.ref === a.target.id);
+    // le bloc le plus récent déjà commencé, sinon le prochain
+    let b = cands.filter(b => b.s <= now).pop() || cands[0];
+    if (!b) { toast('Aucun bloc trouvé'); return; }
+    const k = bkey(Object.assign({ date: today }, b));
+    if (a.action === 'skip' && b.e > now) { // sauter un bloc en cours : il se termine maintenant
+      b.e = Math.max(b.s + 5 * MIN, Math.floor(now / (5 * MIN)) * 5 * MIN);
+    }
+    setStatus(k, a.action); toast(a.action === 'done' ? 'Noté : fait' : 'Noté : sauté'); return;
+  }
+  saveAll(); replan(); saveAll(); render(); sync(); toast('Replanifié');
+}
+
+// ====================== réglages ======================
+function renderSettings() {
+  const g = cfg.google; const cals = events.cals || [];
+  const el = document.getElementById('reg');
+  el.innerHTML = `
+<h2>Google Agenda</h2><div class="card">
+  <div class="f"><label>Client ID OAuth</label></div>
+  <div class="f"><input type="text" id="g-cid" value="${esc(g.clientId)}" placeholder="xxxx.apps.googleusercontent.com"></div>
+  <button class="btn p" onclick="saveClientId();login()">${tokenOk() ? 'Reconnecter' : 'Connecter Google'}</button>
+  ${cals.length ? '<div class="f" style="margin-top:12px"><label><b>Agendas lus</b> (cours, rdv…)</label></div>' + cals.map(c => `<div class="f"><input type="checkbox" ${g.sourceCals.includes(c.id) ? 'checked' : ''} onchange="toggleCal('${c.id}',this.checked)"><label>${esc(c.summary)}</label></div>`).join('') +
+    `<div class="f" style="margin-top:12px"><label><b>Agenda où écrire le planning</b></label></div><div class="f"><select id="g-plan" onchange="cfg.google.planCal=this.value;saveAll()"><option value="">— choisir —</option>${cals.map(c => `<option value="${c.id}" ${g.planCal === c.id ? 'selected' : ''}>${esc(c.summary)}</option>`).join('')}</select></div><button class="btn" onclick="createPlanCal()">Créer un agenda « Planning »</button>` : '<p class="small">Connecte-toi pour voir tes agendas.</p>'}
+  <button class="btn" onclick="refreshEvents(true)">Relire l'agenda maintenant</button>
+</div>
+<h2>Journée</h2><div class="card">
+  <div class="f"><label>Lever</label><input type="time" value="${cfg.wake}" onchange="cfg.wake=this.value;saveAll()"></div>
+  <div class="f"><label>Coucher (dur)</label><input type="time" value="${cfg.bed}" onchange="cfg.bed=this.value;saveAll()"></div>
+  <div class="f"><label>Rien planifié avant le coucher (min)</label><input type="number" value="${cfg.windDown}" onchange="cfg.windDown=+this.value;saveAll()"></div>
+</div>
+<h2>Routines (repas, trajets…)</h2><div class="card" id="routines"></div>
+<h2>Projets</h2><div class="card" id="projects"><p class="small">libre = temps libre (placé le soir) · quotidien = X min par jour · remplissage = prend tout le reste, par blocs</p></div>
+<h2>Tâches à deadline</h2><div class="card" id="tasks"><p class="small">Ajoute-les plutôt en dictée : « révision marketing 3h avant vendredi ».</p></div>
+<h2>Données</h2><div class="card">
+  <button class="btn p" onclick="replan();saveAll();render();sync();toast('Replanifié')">Replanifier maintenant</button>
+  <button class="btn" onclick="exportData()">Exporter (sauvegarde)</button>
+  <button class="btn" onclick="importData()">Importer</button>
+  <button class="btn danger" onclick="if(confirm('Tout effacer ?')){localStorage.clear();location.reload()}">Tout effacer</button>
+</div>`;
+  renderRoutines(); renderProjects(); renderTasks();
+}
+function saveClientId() { cfg.google.clientId = document.getElementById('g-cid').value.trim(); saveAll(); }
+function toggleCal(id, on) { const a = cfg.google.sourceCals; if (on && !a.includes(id)) a.push(id); if (!on) cfg.google.sourceCals = a.filter(x => x !== id); saveAll(); }
+function renderRoutines() {
+  const el = document.getElementById('routines');
+  el.innerHTML = cfg.routines.map((r, i) => `<div class="li"><input type="checkbox" ${r.off ? '' : 'checked'} onchange="cfg.routines[${i}].off=!this.checked;saveAll()"><input type="text" value="${esc(r.name)}" onchange="cfg.routines[${i}].name=this.value;saveAll()"><input type="time" value="${r.start}" onchange="cfg.routines[${i}].start=this.value;saveAll()"><input type="number" value="${r.dur}" onchange="cfg.routines[${i}].dur=+this.value;saveAll()"><span class="small">min</span><button class="x" onclick="cfg.routines.splice(${i},1);saveAll();renderRoutines()">×</button></div>`).join('') +
+    `<button class="btn" onclick="cfg.routines.push({name:'Routine',start:'18:00',dur:30});saveAll();renderRoutines()">+ routine</button>`;
+}
+function renderProjects() {
+  const el = document.getElementById('projects'); const kinds = { libre: 'libre', daily: 'quotidien', fill: 'remplissage' };
+  el.querySelectorAll('.li,.btn').forEach(x => x.remove());
+  el.insertAdjacentHTML('beforeend', cfg.projects.map((p, i) => `<div class="li"><input type="checkbox" ${p.off ? '' : 'checked'} onchange="cfg.projects[${i}].off=!this.checked;saveAll()"><input type="color" value="${p.color || '#5b8def'}" onchange="cfg.projects[${i}].color=this.value;saveAll()" style="width:34px;height:34px;padding:0;border:0;background:none"><input type="text" value="${esc(p.name)}" onchange="cfg.projects[${i}].name=this.value;saveAll()"><select onchange="cfg.projects[${i}].kind=this.value;saveAll()">${Object.keys(kinds).map(k => `<option value="${k}" ${p.kind === k ? 'selected' : ''}>${kinds[k]}</option>`).join('')}</select><span class="small">min</span><input type="number" value="${p.min || 0}" onchange="cfg.projects[${i}].min=+this.value;saveAll()"><span class="small">max/j</span><input type="number" value="${p.max || 0}" onchange="cfg.projects[${i}].max=+this.value;saveAll()"><button class="x" onclick="cfg.projects.splice(${i},1);saveAll();renderProjects()">×</button></div>`).join('') +
+    `<button class="btn" onclick="cfg.projects.push({id:uid(),name:'Projet',kind:'daily',min:60,max:60,color:'#a78bfa'});saveAll();renderProjects()">+ projet</button>`);
+}
+function renderTasks() {
+  const el = document.getElementById('tasks');
+  el.querySelectorAll('.li,.btn').forEach(x => x.remove());
+  el.insertAdjacentHTML('beforeend', tasks.map((t, i) => `<div class="li"><input type="checkbox" ${t.done ? 'checked' : ''} onchange="tasks[${i}].done=this.checked;saveAll()" title="terminée"><input type="text" value="${esc(t.name)}" onchange="tasks[${i}].name=this.value;saveAll()"><input type="number" value="${t.minutes}" onchange="tasks[${i}].minutes=+this.value;saveAll()"><span class="small">min · fait ${t.doneMin || 0}</span><input type="date" value="${t.deadline || ''}" onchange="tasks[${i}].deadline=this.value||null;saveAll()"><button class="x" onclick="tasks.splice(${i},1);saveAll();renderTasks()">×</button></div>`).join('') +
+    `<button class="btn" onclick="tasks.push({id:uid(),name:'Tâche',minutes:60,doneMin:0,deadline:null});saveAll();renderTasks()">+ tâche</button>`);
+}
+function exportData() {
+  const data = { cfg, tasks, extras, overrides, status, plan };
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' }); const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'jour-' + todayStr() + '.json'; a.click();
+}
+function importData() {
+  const i = document.createElement('input'); i.type = 'file'; i.accept = 'application/json';
+  i.onchange = () => { const r = new FileReader(); r.onload = () => { try { const d = JSON.parse(r.result); cfg = Object.assign({}, DEFAULT_CFG, d.cfg || {}); tasks = d.tasks || []; extras = d.extras || []; overrides = d.overrides || {}; status = d.status || {}; plan = d.plan || {}; saveAll(); location.reload(); } catch (e) { alert('Fichier invalide'); } }; r.readAsText(i.files[0]); };
+  i.click();
+}
+
+// ====================== Google Calendar ======================
+const SCOPE = 'https://www.googleapis.com/auth/calendar';
+const API = 'https://www.googleapis.com/calendar/v3';
+function tokenOk() { return gtok && gtok.exp > Date.now() + 30000; }
+function login() {
+  if (!cfg.google.clientId) { toast('Renseigne le Client ID dans Réglages'); return; }
+  const redirect = location.origin + location.pathname.replace(/index\.html$/, '');
+  const u = 'https://accounts.google.com/o/oauth2/v2/auth?client_id=' + encodeURIComponent(cfg.google.clientId) + '&redirect_uri=' + encodeURIComponent(redirect) + '&response_type=token&scope=' + encodeURIComponent(SCOPE) + '&include_granted_scopes=true';
+  location.href = u;
+}
+function onChip() { if (!cfg.google.clientId) go('reglages', document.querySelectorAll('nav button')[3]); else if (!tokenOk()) login(); else refreshEvents(true); }
+function grabToken() {
+  const h = location.hash; if (!h || h.indexOf('access_token') < 0) return false;
+  const p = new URLSearchParams(h.slice(1));
+  gtok = { token: p.get('access_token'), exp: Date.now() + (+p.get('expires_in') || 3600) * 1000 }; SV('gtoken', gtok);
+  history.replaceState(null, '', location.pathname.replace(/index\.html$/, '')); return true;
+}
+async function gfetch(path, opts) {
+  if (!tokenOk()) throw new Error('token');
+  const r = await fetch(API + path, Object.assign({ headers: { Authorization: 'Bearer ' + gtok.token, 'Content-Type': 'application/json' } }, opts || {}));
+  if (r.status === 401) { gtok = null; SV('gtoken', null); renderHeader(); throw new Error('token'); }
+  if (r.status === 204) return null;
+  const j = await r.json(); if (!r.ok) throw new Error(j.error && j.error.message || r.status); return j;
+}
+async function loadCals() {
+  const j = await gfetch('/users/me/calendarList'); events.cals = (j.items || []).map(c => ({ id: c.id, summary: c.summary, primary: !!c.primary }));
+  if (!cfg.google.sourceCals.length) { const pr = events.cals.find(c => c.primary); if (pr) cfg.google.sourceCals = [pr.id]; }
+  const pl = events.cals.find(c => c.summary === 'Planning'); if (pl && !cfg.google.planCal) cfg.google.planCal = pl.id;
+  SV('events', events); saveAll();
+}
+async function createPlanCal() {
+  try { const j = await gfetch('/calendars', { method: 'POST', body: JSON.stringify({ summary: 'Planning', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }) }); cfg.google.planCal = j.id; saveAll(); await loadCals(); renderSettings(); toast('Agenda Planning créé'); } catch (e) { toast('Erreur : ' + e.message); }
+}
+async function refreshEvents(force) {
+  if (!tokenOk()) { renderHeader(); return false; }
+  if (!force && Date.now() - events.fetchedAt < 20 * MIN) return true;
+  try {
+    if (!events.cals || !events.cals.length) await loadCals();
+    const tmin = new Date(); tmin.setHours(0, 0, 0, 0); const tmax = new Date(tmin.getTime() + 9 * 86400000);
+    const items = [];
+    for (const cid of cfg.google.sourceCals) {
+      if (cid === cfg.google.planCal) continue;
+      const j = await gfetch('/calendars/' + encodeURIComponent(cid) + '/events?singleEvents=true&orderBy=startTime&maxResults=250&timeMin=' + encodeURIComponent(tmin.toISOString()) + '&timeMax=' + encodeURIComponent(tmax.toISOString()));
+      for (const e of (j.items || [])) {
+        if (!e.start || !e.start.dateTime || e.transparency === 'transparent' || e.status === 'cancelled') continue; // journée entière / "disponible" ignorés
+        items.push({ s: new Date(e.start.dateTime).getTime(), e: new Date(e.end.dateTime).getTime(), title: e.summary || '(sans titre)', cal: cid });
+      }
+    }
+    events.items = items; events.fetchedAt = Date.now(); SV('events', events);
+    replan(); saveAll(); render(); sync(); return true;
+  } catch (e) { toast('Agenda : ' + e.message); renderHeader(); return false; }
+}
+let syncing = false;
+async function sync() {
+  if (!tokenOk() || !cfg.google.planCal || syncing) return;
+  syncing = true;
+  try {
+    const now = Date.now(); const tmax = now + 8 * 86400000;
+    const want = {};
+    for (const ds of Object.keys(plan)) for (const b of plan[ds].blocks) if (b.s >= now && b.s < tmax) {
+      const col = b.color || (proj(b.ref) || {}).gcolor; const p = proj(b.ref);
+      want[b.s + '|' + b.e + '|' + b.title] = { summary: b.title, start: { dateTime: new Date(b.s).toISOString() }, end: { dateTime: new Date(b.e).toISOString() }, colorId: (p && p.gcolor) || (b.kind === 'task' ? '11' : '9'), extendedProperties: { private: { jour: '1' } }, reminders: { useDefault: false, overrides: b.kind === 'libre' ? [] : [{ method: 'popup', minutes: 0 }] } };
+    }
+    for (const x of extras) if (x.s >= now && x.s < tmax) want[x.s + '|' + x.e + '|' + x.title] = { summary: x.title, start: { dateTime: new Date(x.s).toISOString() }, end: { dateTime: new Date(x.e).toISOString() }, colorId: '6', extendedProperties: { private: { jour: '1' } } };
+    const cal = encodeURIComponent(cfg.google.planCal);
+    const j = await gfetch('/calendars/' + cal + '/events?privateExtendedProperty=jour%3D1&singleEvents=true&maxResults=500&timeMin=' + encodeURIComponent(new Date(now).toISOString()) + '&timeMax=' + encodeURIComponent(new Date(tmax).toISOString()));
+    const have = {};
+    for (const e of (j.items || [])) { if (e.status === 'cancelled' || !e.start.dateTime) continue; const k = new Date(e.start.dateTime).getTime() + '|' + new Date(e.end.dateTime).getTime() + '|' + e.summary; if (have[k]) await gfetch('/calendars/' + cal + '/events/' + e.id, { method: 'DELETE' }); else have[k] = e.id; }
+    for (const k of Object.keys(have)) if (!want[k]) await gfetch('/calendars/' + cal + '/events/' + have[k], { method: 'DELETE' });
+    for (const k of Object.keys(want)) if (!have[k]) await gfetch('/calendars/' + cal + '/events', { method: 'POST', body: JSON.stringify(want[k]) });
+    SV('lastSync', Date.now());
+  } catch (e) { if (e.message !== 'token') toast('Sync : ' + e.message); }
+  syncing = false; renderHeader();
+}
+
+// ====================== démarrage ======================
+(async function init() {
+  const fresh = grabToken();
+  replan(); saveAll(); render();
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { });
+  if (fresh) { await loadCals().catch(() => { }); await refreshEvents(true); if (document.getElementById('v-reglages').classList.contains('on')) renderSettings(); toast('Google connecté'); }
+  else await refreshEvents(false);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { const last = LS('lastPlan') || 0; if (Date.now() - last > 30 * MIN || todayStr() !== Object.keys(plan).find(d => d >= todayStr())) { replan(); saveAll(); render(); } refreshEvents(false); } });
+  setInterval(() => { if (document.getElementById('v-jour').classList.contains('on')) renderDay(); }, 60000);
+})();
+</script>
+</body>
+</html>

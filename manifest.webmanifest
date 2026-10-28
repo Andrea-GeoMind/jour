@@ -1,0 +1,11 @@
+{
+  "name": "Jour",
+  "short_name": "Jour",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0f1115",
+  "theme_color": "#0f1115",
+  "lang": "fr",
+  "icons": [{ "src": "icon.png", "sizes": "512x512", "type": "image/png" }]
+}
