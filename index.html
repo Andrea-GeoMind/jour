@@ -140,10 +140,11 @@ const DEFAULT_CFG = {
     { id: 'geomind', name: 'GeoMind', kind: 'fill', max: 300, chunk: 120, minBlock: 45, color: '#5b8def', gcolor: '9' },
     { id: 'sport', name: 'Sport', kind: 'daily', min: 45, max: 45, color: '#3ec28f', gcolor: '10', off: true },
   ],
-  google: { clientId: '1040783596085-q4q8issud4o96n1d46ncvhgjnq82ad8h.apps.googleusercontent.com', sourceCals: [], planCal: '', authUrl: '', authKey: '' },
+  google: { clientId: '1040783596085-q4q8issud4o96n1d46ncvhgjnq82ad8h.apps.googleusercontent.com', sourceCals: [], planCal: '', authUrl: 'https://jour-auth.andrea-schwertz2008.workers.dev', authKey: '' },
 };
 let cfg = Object.assign({}, DEFAULT_CFG, LS('cfg') || {});
 if (!cfg.google.clientId) cfg.google.clientId = DEFAULT_CFG.google.clientId;
+if (!cfg.google.authUrl) cfg.google.authUrl = DEFAULT_CFG.google.authUrl;
 let tasks = LS('tasks') || [];
 let extras = LS('extras') || [];
 let overrides = LS('overrides') || {};
