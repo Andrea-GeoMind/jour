@@ -140,7 +140,7 @@ const DEFAULT_CFG = {
     { id: 'geomind', name: 'GeoMind', kind: 'fill', max: 300, chunk: 120, minBlock: 45, color: '#5b8def', gcolor: '9' },
     { id: 'sport', name: 'Sport', kind: 'daily', min: 45, max: 45, color: '#3ec28f', gcolor: '10', off: true },
   ],
-  google: { clientId: '1040783596085-q4q8issud4o96n1d46ncvhgjnq82ad8h.apps.googleusercontent.com', sourceCals: [], planCal: '' },
+  google: { clientId: '1040783596085-q4q8issud4o96n1d46ncvhgjnq82ad8h.apps.googleusercontent.com', sourceCals: [], planCal: '', authUrl: '', authKey: '' },
 };
 let cfg = Object.assign({}, DEFAULT_CFG, LS('cfg') || {});
 if (!cfg.google.clientId) cfg.google.clientId = DEFAULT_CFG.google.clientId;
@@ -189,8 +189,9 @@ const proj = id => (cfg.projects || []).find(p => p.id === id);
 function render() { renderHeader(); renderDay(); renderWeek(); renderBilan(); }
 function renderHeader() {
   const chip = document.getElementById('gchip');
-  if (!cfg.google.clientId) { chip.textContent = 'Google : à configurer'; chip.className = 'chip'; }
-  else if (tokenOk()) { chip.textContent = 'Google ✓'; chip.className = 'chip ok'; }
+  if (tokenOk()) { chip.textContent = 'Google ✓'; chip.className = 'chip ok'; }
+  else if (hasAuthService()) { chip.textContent = authState === 'login' ? 'Connecter Google' : (authState === 'réseau' ? 'Hors ligne' : 'Google…'); chip.className = 'chip ' + (authState === 'login' ? 'ko' : ''); }
+  else if (!cfg.google.clientId) { chip.textContent = 'Google : à configurer'; chip.className = 'chip'; }
   else { chip.textContent = 'Reconnecter Google'; chip.className = 'chip ko'; }
   const n = events.fetchedAt ? 'agenda lu ' + new Date(events.fetchedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : 'agenda non lu';
   document.getElementById('hsub').textContent = n;
@@ -309,7 +310,14 @@ function renderSettings() {
   const g = cfg.google; const cals = events.cals || [];
   const el = document.getElementById('reg');
   el.innerHTML = `
-<h2>Google Agenda</h2><div class="card">
+<h2>Connexion Google permanente</h2><div class="card">
+  <p class="small">Un petit service à toi (Cloudflare) garde la connexion : tu te connectes une fois, pour toutes les versions de l'app.</p>
+  <div class="f"><input type="text" id="g-aurl" value="${esc(g.authUrl || '')}" placeholder="https://jour-auth.xxx.workers.dev" onchange="cfg.google.authUrl=this.value.trim().replace(/\\/$/,'');saveAll()"></div>
+  <div class="f"><input type="text" id="g-akey" value="${esc(g.authKey || '')}" placeholder="clé du service" onchange="cfg.google.authKey=this.value.trim();saveAll()"></div>
+  <a class="btn p" style="text-align:center;text-decoration:none" href="${esc(loginLink())}" target="_blank" rel="noopener" onclick="this.href=loginLink()">Connecter Google (une fois)</a>
+  <button class="btn" onclick="gtok=null;ensureToken().then(ok=>{toast(ok?'Connecté ✓':'Pas connecté : '+authState);renderSettings()})">Tester la connexion</button>
+</div>
+<h2>Ancienne méthode (sans service, 1h)</h2><div class="card">
   <div class="f"><label>Client ID OAuth</label></div>
   <div class="f"><input type="text" id="g-cid" value="${esc(g.clientId)}" placeholder="xxxx.apps.googleusercontent.com"></div>
   <button class="btn p" onclick="saveClientId();login()">${tokenOk() ? 'Reconnecter' : 'Connecter Google'}</button>
@@ -367,13 +375,30 @@ function importData() {
 const SCOPE = 'https://www.googleapis.com/auth/calendar';
 const API = 'https://www.googleapis.com/calendar/v3';
 function tokenOk() { return gtok && gtok.exp > Date.now() + 30000; }
+let authState = '';
+function hasAuthService() { return !!(cfg.google.authUrl && cfg.google.authKey); }
+function loginLink() { return (cfg.google.authUrl || '').replace(/\/$/, '') + '/login?key=' + encodeURIComponent(cfg.google.authKey || ''); }
+async function ensureToken() {
+  if (tokenOk()) return true;
+  if (!hasAuthService()) return false;
+  try {
+    const r = await fetch(cfg.google.authUrl.replace(/\/$/, '') + '/token', { headers: { 'X-Key': cfg.google.authKey } });
+    const j = await r.json();
+    if (j.token) { gtok = { token: j.token, exp: j.exp }; SV('gtoken', gtok); authState = ''; renderHeader(); return true; }
+    authState = j.login ? 'login' : (j.error || 'erreur'); renderHeader(); return false;
+  } catch (e) { authState = 'réseau'; renderHeader(); return false; }
+}
 function login() {
   if (!cfg.google.clientId) { toast('Renseigne le Client ID dans Réglages'); return; }
   const redirect = location.origin + location.pathname.replace(/index\.html$/, '');
   const u = 'https://accounts.google.com/o/oauth2/v2/auth?client_id=' + encodeURIComponent(cfg.google.clientId) + '&redirect_uri=' + encodeURIComponent(redirect) + '&response_type=token&scope=' + encodeURIComponent(SCOPE) + '&include_granted_scopes=true';
   location.href = u;
 }
-function onChip() { if (!cfg.google.clientId) go('reglages', document.querySelectorAll('nav button')[3]); else if (!tokenOk()) login(); else refreshEvents(true); }
+function onChip() {
+  if (tokenOk()) return refreshEvents(true);
+  if (hasAuthService()) { if (authState === 'login') window.open(loginLink(), '_blank'); else ensureToken().then(ok => ok ? refreshEvents(true) : toast('Connexion : ' + (authState || 'impossible'))); return; }
+  if (!cfg.google.clientId) go('reglages', document.querySelectorAll('nav button')[3]); else login();
+}
 function grabToken() {
   const h = location.hash; if (!h || h.indexOf('access_token') < 0) return false;
   const p = new URLSearchParams(h.slice(1));
@@ -381,6 +406,7 @@ function grabToken() {
   history.replaceState(null, '', location.pathname.replace(/index\.html$/, '')); return true;
 }
 async function gfetch(path, opts) {
+  if (!tokenOk()) await ensureToken();
   if (!tokenOk()) throw new Error('token');
   const r = await fetch(API + path, Object.assign({ headers: { Authorization: 'Bearer ' + gtok.token, 'Content-Type': 'application/json' } }, opts || {}));
   if (r.status === 401) { gtok = null; SV('gtoken', null); renderHeader(); throw new Error('token'); }
@@ -397,7 +423,7 @@ async function createPlanCal() {
   try { const j = await gfetch('/calendars', { method: 'POST', body: JSON.stringify({ summary: 'Planning', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }) }); cfg.google.planCal = j.id; saveAll(); await loadCals(); renderSettings(); toast('Agenda Planning créé'); } catch (e) { toast('Erreur : ' + e.message); }
 }
 async function refreshEvents(force) {
-  if (!tokenOk()) { renderHeader(); return false; }
+  if (!tokenOk() && !(await ensureToken())) { renderHeader(); return false; }
   if (!force && Date.now() - events.fetchedAt < 20 * MIN) return true;
   try {
     if (!events.cals || !events.cals.length) await loadCals();
@@ -417,7 +443,8 @@ async function refreshEvents(force) {
 }
 let syncing = false;
 async function sync() {
-  if (!tokenOk() || !cfg.google.planCal || syncing) return;
+  if (!cfg.google.planCal || syncing) return;
+  if (!tokenOk() && !(await ensureToken())) return;
   syncing = true;
   try {
     const now = Date.now(); const tmax = now + 8 * 86400000;
@@ -441,11 +468,12 @@ async function sync() {
 // ====================== démarrage ======================
 (async function init() {
   const fresh = grabToken();
+  if (location.hash === '#connected') { history.replaceState(null, '', location.pathname); gtok = null; toast('Google connecté ✓'); }
   replan(); saveAll(); render();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { });
   if (fresh) { await loadCals().catch(() => { }); await refreshEvents(true); if (document.getElementById('v-reglages').classList.contains('on')) renderSettings(); toast('Google connecté'); }
-  else await refreshEvents(false);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) { const last = LS('lastPlan') || 0; if (Date.now() - last > 30 * MIN || todayStr() !== Object.keys(plan).find(d => d >= todayStr())) { replan(); saveAll(); render(); } refreshEvents(false); } });
+  else { if (!tokenOk()) await ensureToken(); await refreshEvents(false); }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { if (!tokenOk()) ensureToken().then(ok => { if (ok) refreshEvents(true); }); const last = LS('lastPlan') || 0; if (Date.now() - last > 30 * MIN || todayStr() !== Object.keys(plan).find(d => d >= todayStr())) { replan(); saveAll(); render(); } refreshEvents(false); } });
   setInterval(() => { if (document.getElementById('v-jour').classList.contains('on')) renderDay(); }, 60000);
 })();
 </script>

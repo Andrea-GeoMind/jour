@@ -1,0 +1,39 @@
+name: Déployer le service de connexion
+on:
+  push:
+    branches: [main]
+    paths: ['worker/**', '.github/workflows/worker.yml']
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Espace de stockage (KV)
+        run: |
+          LIST=$(npx --yes wrangler@3 kv namespace list 2>/dev/null || echo '[]')
+          ID=$(node -e "const a=JSON.parse(process.argv[1]);const n=a.find(x=>/TOKENS/.test(x.title));console.log(n?n.id:'')" "$LIST")
+          if [ -z "$ID" ]; then
+            OUT=$(npx --yes wrangler@3 kv namespace create TOKENS)
+            ID=$(echo "$OUT" | grep -o 'id = "[^"]*"' | head -1 | cut -d'"' -f2)
+          fi
+          echo "KV: $ID"
+          sed -i "s/KV_ID/$ID/" wrangler.toml
+      - name: Déploiement
+        run: npx --yes wrangler@3 deploy
+      - name: Secrets
+        run: |
+          printf '%s' "${{ secrets.GOOGLE_CLIENT_ID }}" | npx --yes wrangler@3 secret put GOOGLE_CLIENT_ID
+          printf '%s' "${{ secrets.GOOGLE_CLIENT_SECRET }}" | npx --yes wrangler@3 secret put GOOGLE_CLIENT_SECRET
+          printf '%s' "${{ secrets.APP_SECRET }}" | npx --yes wrangler@3 secret put APP_SECRET
+          printf '%s' "https://andrea-geomind.github.io/jour/" | npx --yes wrangler@3 secret put APP_URL
+      - name: Adresse du service
+        run: npx --yes wrangler@3 deployments list 2>/dev/null | head -20 || true
