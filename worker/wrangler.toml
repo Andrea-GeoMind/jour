@@ -6,3 +6,7 @@ workers_dev = true
 [[kv_namespaces]]
 binding = "TOKENS"
 id = "KV_ID"
+
+[vars]
+GOOGLE_CLIENT_ID = "1040783596085-q4q8issud4o96n1d46ncvhgjnq82ad8h.apps.googleusercontent.com"
+APP_URL = "https://andrea-geomind.github.io/jour/"

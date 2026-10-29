@@ -31,9 +31,7 @@ jobs:
         run: npx --yes wrangler@3 deploy
       - name: Secrets
         run: |
-          printf '%s' "${{ secrets.GOOGLE_CLIENT_ID }}" | npx --yes wrangler@3 secret put GOOGLE_CLIENT_ID
           printf '%s' "${{ secrets.GOOGLE_CLIENT_SECRET }}" | npx --yes wrangler@3 secret put GOOGLE_CLIENT_SECRET
           printf '%s' "${{ secrets.APP_SECRET }}" | npx --yes wrangler@3 secret put APP_SECRET
-          printf '%s' "https://andrea-geomind.github.io/jour/" | npx --yes wrangler@3 secret put APP_URL
       - name: Adresse du service
         run: npx --yes wrangler@3 deployments list 2>/dev/null | head -20 || true
