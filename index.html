@@ -253,6 +253,7 @@ function renderDay() {
   }
   tl.innerHTML = html || '<div class="empty">Journée vide.</div>';
   if (isToday && now > day.window.end && !day.blocks.some(b => b.e > now)) document.getElementById('dfoot').textContent = 'Journée terminée. Coucher prévu à ' + fmt(day.window.end + cfg.windDown * MIN) + '.';
+  if (day.off) document.getElementById('dfoot').innerHTML = 'Journée sans rien de prévu. <a href="#" style="color:var(--blue);text-decoration:none" onclick="delete overrides[viewDate].off;saveAll();replan();saveAll();render();sync();return false">Replanifier cette journée</a>';
 }
 function renderWeek() {
   const el = document.getElementById('wk'); const days = Object.keys(plan).filter(d => d >= todayStr()).sort();
@@ -316,33 +317,56 @@ function setStatus(k, st) {
   if (st) status[k] = st; else delete status[k];
   saveAll(); replan(); saveAll(); render(); sync();
 }
+let need = null, held = []; // question en attente ("combien de temps ?") et ordres compris mais pas encore validés
 function onDictate(ev) {
   ev.preventDefault();
   const inp = document.getElementById('din'); const text = inp.value.trim(); if (!text) return false;
-  pending = P.parse(text, { cfg, now: Date.now(), tasks });
-  const c = document.getElementById('confirm'); document.getElementById('ctext').textContent = pending.summary; c.classList.add('on');
-  c.querySelectorAll('.bt button')[1].style.display = pending.action === 'unknown' ? 'none' : '';
-  inp.blur();
+  const ctx = { cfg, now: Date.now(), tasks, need };
+  let acts = need && P.findDuration(text) != null ? [P.parse(text, ctx)] : P.parseAll(text, ctx);
+  acts = held.concat(acts); held = [];
+  pending = acts;
+  const ok = acts.filter(a => a.action !== 'unknown' && a.action !== 'need');
+  const asks = acts.filter(a => a.action === 'need');
+  const bad = acts.filter(a => a.action === 'unknown');
+  const lines = [];
+  for (const a of ok) lines.push('• ' + a.summary);
+  for (const a of asks) lines.push('? ' + a.summary);
+  for (const a of bad) lines.push('✕ Pas compris : « ' + a.text + ' »');
+  const c = document.getElementById('confirm'); const p = document.getElementById('ctext');
+  p.innerHTML = lines.map(esc).join('<br>') + (bad.length && !ok.length && !asks.length ? '<br><span style="color:var(--sec)">Un ordre par phrase : « dentiste demain de 14h à 16h », « rien jusqu\'à samedi », « samedi révisions 4h », « pas fait poker », « coucher 1h ».</span>' : '');
+  c.classList.add('on');
+  const btns = c.querySelectorAll('.bt button');
+  btns[1].style.display = ok.length ? '' : 'none';
+  btns[1].textContent = asks.length && ok.length ? 'Valider sans ça' : 'Valider';
+  btns[0].textContent = ok.length ? 'Annuler' : 'OK';
+  need = asks.length ? asks[0] : null;
+  if (asks.length) { held = ok; inp.value = ''; inp.placeholder = 'Réponds ici (ex : 4h)'; inp.focus(); } else inp.blur();
   return false;
 }
-function cancelAction() { pending = null; document.getElementById('confirm').classList.remove('on'); }
+function cancelAction() { pending = null; need = null; held = []; document.getElementById('confirm').classList.remove('on'); document.getElementById('din').placeholder = 'Dicter un imprévu, une tâche…'; }
 function applyAction() {
-  const a = pending; if (!a) return; cancelAction(); document.getElementById('din').value = '';
-  const now = Date.now(); const today = todayStr();
-  if (a.action === 'extra') extras.push({ id: uid(), date: a.date, s: a.s, e: a.e, title: a.title });
-  else if (a.action === 'task') tasks.push({ id: uid(), name: a.title, minutes: a.minutes, deadline: a.deadline, doneMin: 0 });
-  else if (a.action === 'override') { overrides[a.date] = overrides[a.date] || {}; if (a.field === 'skip') overrides[a.date].skip = (overrides[a.date].skip || []).concat([a.value]); else overrides[a.date][a.field] = a.value; }
-  else if (a.action === 'done' || a.action === 'skip') {
-    const d = plan[today]; if (!d) return;
-    let cands = d.blocks.filter(b => b.kind !== 'libre');
-    if (a.target) cands = cands.filter(b => b.ref === a.target.id);
-    let b = cands.filter(b => b.s <= now).pop() || cands[0];
-    if (!b) { toast('Aucun bloc trouvé'); return; }
-    const k = bkey(Object.assign({ date: today }, b));
-    if (a.action === 'skip' && b.e > now) b.e = Math.max(b.s + 5 * MIN, Math.floor(now / (5 * MIN)) * 5 * MIN);
-    setStatus(k, a.action); toast(a.action === 'done' ? 'Noté : fait' : 'Noté : sauté'); return;
+  const acts = pending; if (!acts) return;
+  cancelAction(); document.getElementById('din').value = '';
+  const now = Date.now(); const today = todayStr(); let statusMsg = null;
+  for (const a of acts) {
+    if (a.action === 'extra') extras.push({ id: uid(), date: a.date, s: a.s, e: a.e, title: a.title });
+    else if (a.action === 'task') tasks.push({ id: uid(), name: a.title, minutes: a.minutes, deadline: a.deadline, from: a.from || null, doneMin: 0 });
+    else if (a.action === 'off') for (const ds of a.dates) { overrides[ds] = overrides[ds] || {}; overrides[ds].off = true; }
+    else if (a.action === 'override') { overrides[a.date] = overrides[a.date] || {}; if (a.field === 'skip') overrides[a.date].skip = (overrides[a.date].skip || []).concat([a.value]); else overrides[a.date][a.field] = a.value; }
+    else if (a.action === 'done' || a.action === 'skip') {
+      const d = plan[today]; if (!d) continue;
+      let cands = d.blocks.filter(b => b.kind !== 'libre');
+      if (a.target) cands = cands.filter(b => b.ref === a.target.id);
+      let b = cands.filter(b => b.s <= now).pop() || cands[0];
+      if (!b) { toast('Aucun bloc trouvé'); continue; }
+      const k = bkey(Object.assign({ date: today }, b));
+      if (a.action === 'skip' && b.e > now) b.e = Math.max(b.s + 5 * MIN, Math.floor(now / (5 * MIN)) * 5 * MIN);
+      const m = (b.e - b.s) / MIN; const prev = status[k];
+      if (b.kind === 'task') { const t = tasks.find(t => t.id === b.ref); if (t) { if (prev === 'done') t.doneMin = Math.max(0, (t.doneMin || 0) - m); if (a.action === 'done') t.doneMin = (t.doneMin || 0) + m; t.done = t.doneMin >= t.minutes; } }
+      status[k] = a.action; statusMsg = a.action === 'done' ? 'Noté : fait' : 'Noté : sauté';
+    }
   }
-  saveAll(); replan(); saveAll(); render(); sync(); toast('Replanifié');
+  saveAll(); replan(); saveAll(); render(); sync(); toast(statusMsg || 'Replanifié');
 }
 
 // ====================== réglages (style iOS, sous-pages) ======================

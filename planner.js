@@ -42,21 +42,25 @@
       const big = order.filter(sl => (sl.e - sl.s) / MIN >= Math.min(need, maxChunk));
       order = big.concat(order.filter(sl => !big.includes(sl)));
     }
-    for (const sl of order) {
-      if (need - got <= 0) break;
-      const len = (sl.e - sl.s) / MIN;
-      if (len < minBlock) continue;
-      let chunk = Math.min(need - got, len, maxChunk);
-      chunk = Math.floor(chunk / 5) * 5;
-      if (chunk < minBlock) {
-        // si le créneau est petit mais ≥ minBlock, on prend tout
-        if (len >= minBlock && need - got >= minBlock) chunk = Math.min(len, minBlock); else continue;
+    for (let pass = 0; pass < 8 && need - got > 0; pass++) {
+      let progress = false;
+      for (const sl of order) {
+        if (need - got <= 0) break;
+        const len = (sl.e - sl.s) / MIN;
+        if (len < minBlock) continue;
+        let chunk = Math.min(need - got, len, maxChunk);
+        chunk = Math.floor(chunk / 5) * 5;
+        if (chunk < minBlock) {
+          if (len >= minBlock && need - got >= minBlock) chunk = Math.min(len, minBlock); else continue;
+        }
+        let s, e;
+        if (opts.reverse) { e = sl.e; s = e - chunk * MIN; sl.e = s; }
+        else { s = sl.s; e = s + chunk * MIN; sl.s = e; }
+        blocks.push(Object.assign({ s, e }, meta));
+        got += chunk; progress = true;
+        if (opts.single) break;
       }
-      let s, e;
-      if (opts.reverse) { e = sl.e; s = e - chunk * MIN; sl.e = s; }
-      else { s = sl.s; e = s + chunk * MIN; sl.s = e; }
-      blocks.push(Object.assign({ s, e }, meta));
-      got += chunk;
+      if (!progress || opts.single) break;
     }
     return got;
   }
@@ -97,16 +101,21 @@
     const total = slots.reduce((a, x) => a + (x.e - x.s), 0) / MIN;
     const blocks = [];
     const skip = new Set(ov.skip || []);
+    if (ov.off) { // journée sans rien : tout le temps devient libre
+      const libreP = (cfg.projects || []).find(p => p.kind === 'libre');
+      for (const sl of slots) if (sl.e - sl.s >= 15 * MIN) blocks.push({ s: sl.s, e: sl.e, title: libreP ? libreP.name : 'Libre', kind: 'libre', ref: libreP ? libreP.id : 'libre', color: libreP && libreP.color });
+      return { date: dateStr, window: w, fixed: fixed.sort((a, b) => a.s - b.s), blocks: mergeBlocks(blocks), total, off: true };
+    }
 
-    // 1. tâches à deadline
-    const tasks = (ctx.tasks || []).filter(t => !t.done && remaining(t, ctx) > 0);
+    // 1. tâches à deadline (et tâches à faire à partir d'un jour donné)
+    const tasks = (ctx.tasks || []).filter(t => !t.done && remaining(t, ctx) > 0 && !(t.from && dateStr < t.from));
     tasks.sort((a, b) => (a.deadline || '9999') < (b.deadline || '9999') ? -1 : 1);
     let taskBudget = total * 0.6;
     for (const t of tasks) {
       const rem = remaining(t, ctx);
       let daysLeft = 3;
       if (t.deadline) daysLeft = Math.round((dayMs(t.deadline) - base) / 86400000); // jours avant le jour J (exclu)
-      const urgent = daysLeft <= 1;
+      const urgent = daysLeft <= 1 || (t.from && t.deadline && Math.round((dayMs(t.deadline) - dayMs(t.from)) / 86400000) <= 1);
       daysLeft = Math.max(1, daysLeft);
       let need = Math.min(rem, Math.ceil(rem / daysLeft / 30) * 30);
       if (!urgent) need = Math.min(need, Math.max(0, Math.floor(taskBudget / 5) * 5));
@@ -128,7 +137,7 @@
       take(slots, blocks, want, { title: libre.name, kind: 'libre', ref: libre.id, color: libre.color }, { reverse: true, minBlock: 30, maxChunk: 240 });
     }
     for (const p of dailies) {
-      take(slots, blocks, ov[p.id] != null ? ov[p.id] : p.min, { title: p.name, kind: 'project', ref: p.id, color: p.color }, { minBlock: 30, maxChunk: p.max || p.min, preferWhole: true });
+      take(slots, blocks, ov[p.id] != null ? ov[p.id] : p.min, { title: p.name, kind: 'project', ref: p.id, color: p.color }, { minBlock: 30, maxChunk: p.max || p.min, preferWhole: true, single: true });
     }
     for (const p of fills) {
       take(slots, blocks, ov[p.id] != null ? ov[p.id] : (p.max || 300), { title: p.name, kind: 'project', ref: p.id, color: p.color }, { minBlock: p.minBlock || 45, maxChunk: p.chunk || 120 });
@@ -174,6 +183,7 @@
   function findTimes(s) { const out = []; let m; TIME_RE.lastIndex = 0; while ((m = TIME_RE.exec(s))) out.push({ idx: m.index, min: timeToMin(m), raw: m[0] }); return out; }
   function findDate(s, today) {
     if (/apres[- ]demain/.test(s)) return ymd(addDays(today, 2));
+    if (/\bweek[- ]?end\b/.test(s)) { let d = new Date(today); while (d.getDay() !== 6) d.setDate(d.getDate() + 1); return ymd(d); }
     if (/\bdemain\b/.test(s)) return ymd(addDays(today, 1));
     if (/\bce soir\b|\baujourd'hui\b|\bauj\b/.test(s)) return ymd(today);
     for (let i = 0; i < 7; i++) {
@@ -182,7 +192,7 @@
         return ymd(addDays(today, diff));
       }
     }
-    const m = /\b(?:le|avant le|pour le|d'ici le)\s+(\d{1,2})(?:\s+(janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre))?\b/.exec(s);
+    const m = /\b(?:le|avant le|pour le|d'ici le|jusqu'au)\s+(\d{1,2})(?:\s+(janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre))?\b/.exec(s);
     if (m) {
       let d = new Date(today); d.setDate(+m[1]);
       if (m[2]) d.setMonth(MONTHS.indexOf(m[2]));
@@ -199,13 +209,15 @@
     m = /(une|1)\s*demi[- ]heure/.test(s); if (m) return 30;
     return null;
   }
-  const STOP = new Set(['imprevu', 'un', 'une', 'le', 'la', 'les', 'de', 'des', 'du', 'a', 'au', 'et', 'j', 'ai', "j'ai", 'je', 'il', 'y', 'ya', 'jusqu', "jusqu'a", 'demain', 'apres', 'ce', 'soir', 'aujourd', "aujourd'hui", 'chez', 'moi', 'vient', 'viennent', 'ajoute', 'ajouter', 'rajoute', 'rajouter', 'faut', 'que', 'il', 'pour', 'avant', 'd', 'ici', 'mettre', 'mets', 'heures', 'heure', 'h', 'min', 'minutes', 'tache', 'nouvelle', 'nouveau', 'en', 'entre', 'vers', 'partir', 'puis', 'sur', 'dans', 'bloque', 'bloquer', 'reserve', 'reserver', 'qui', 'fasse', 'faire', 'fais', 'dois', 'doit', 'falloir', 'me', 'ma', 'mon', 'mes', 'passe', 'passer', 'rdv', 'ai', 'avoir', 'avec']);
+  const STOP = new Set(['imprevu', 'un', 'une', 'le', 'la', 'les', 'de', 'des', 'du', 'a', 'au', 'et', 'j', 'ai', "j'ai", 'je', 'il', 'y', 'ya', 'jusqu', "jusqu'a", 'demain', 'apres', 'ce', 'soir', 'aujourd', "aujourd'hui", 'chez', 'moi', 'vient', 'viennent', 'ajoute', 'ajouter', 'rajoute', 'rajouter', 'faut', 'que', 'il', 'pour', 'avant', 'd', 'ici', 'mettre', 'mets', 'heures', 'heure', 'h', 'min', 'minutes', 'tache', 'nouvelle', 'nouveau', 'en', 'entre', 'vers', 'partir', 'puis', 'sur', 'dans', 'bloque', 'bloquer', 'reserve', 'reserver', 'qui', 'fasse', 'faire', 'fais', 'dois', 'doit', 'falloir', 'me', 'ma', 'mon', 'mes', 'passe', 'passer', 'rdv', 'ai', 'avoir', 'avec', 'bosser', 'travailler', 'reviser', 'preparer', 'beaucoup', 'pas', 'mal', 'plein', 'temps', 'donc', 'plus', 'projets', 'projet', 'ce', 'cette', 'veux', 'voudrais', 'aimerais']);
   function cleanTitle(s) {
     let t = s.replace(TIME_RE, ' ').replace(/\b(apres[- ]demain|demain|ce soir|aujourd'hui)\b/g, ' ');
     for (const d of DAYS) t = t.replace(new RegExp('\\b' + d + '\\b', 'g'), ' ');
     t = t.replace(/\b(le|avant le|pour le|d'ici le)\s+\d{1,2}(\s+(janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre))?\b/g, ' ');
     t = t.replace(/\b\d+\s*(h|min)\b/g, ' ');
-    const words = t.split(/[^a-z0-9']+/).filter(w => w && !STOP.has(w) && !/^\d+$/.test(w));
+    t = t.replace(/\bweek[- ]?end\b/g, ' ');
+    const seen = new Set();
+    const words = t.split(/[^a-z0-9']+/).filter(w => w && !STOP.has(w) && !/^\d+$/.test(w)).filter(w => { const k = w.replace(/s$/, ''); if (seen.has(k)) return false; seen.add(k); return true; });
     if (!words.length) return '';
     const title = words.join(' ');
     return title.charAt(0).toUpperCase() + title.slice(1);
@@ -216,10 +228,27 @@
     return null;
   }
 
-  // Retourne {action, ...champs, summary} ou {action:'unknown'}
+  // Découpe une dictée en ordres et parse chacun. Retourne une liste d'actions.
+  function parseAll(text, ctx) {
+    const parts = norm(text).split(/[.!?;\n]+|\b(?:ensuite|puis|et apres|apres ca|et puis|et aussi|aussi)\b/).map(x => x.trim()).filter(x => x.length > 1);
+    const out = [];
+    for (const p of parts) {
+      const a = parse(p, ctx); a.text = p;
+      if (a.action === 'unknown' && out.length && out[out.length - 1].action === 'unknown') { out[out.length - 1].text += '. ' + p; continue; }
+      out.push(a);
+    }
+    return out.length ? out : [parse(text, ctx)];
+  }
+
+  // Retourne {action, ...champs, summary} ou {action:'unknown'} ou {action:'need', ...} (il manque une info)
   function parse(text, ctx) {
     const today = new Date(ctx.now);
     const s = norm(text);
+    // complément à une question posée juste avant ("combien de temps ?" → "4h")
+    if (ctx.need && ctx.need.action === 'need' && ctx.need.field === 'minutes') {
+      const d = findDuration(s);
+      if (d != null) { const t = ctx.need.task; return { action: 'task', title: t.title, minutes: d, deadline: t.deadline, from: t.from, summary: t.title + ' : ' + d + ' min' + (t.from ? ' à partir de ' + t.fromLabel : '') + (t.deadline && !t.from ? ' avant ' + t.deadlineLabel : '') }; }
+    }
     const date = findDate(s, today) || ymd(today);
     const times = findTimes(s);
     const proj = matchProject(s, ctx.cfg, ctx.tasks);
@@ -227,6 +256,20 @@
     const nice = ds => ds === ymd(today) ? "aujourd'hui" : ds === ymd(addDays(today, 1)) ? 'demain' : new Date(ds + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
     const dlabel = nice(date);
 
+    // rien de prévu jusqu'à <date> / journée libre demain / vacances jusqu'au 3
+    if (/\b(rien|pas de (projet|projets|boulot|travail|taf|planning)|repos|pause|vacances|off|journee libre|libre toute la journee|je veux rien faire)\b/.test(s) && !/\b(poker|geomind)\b/.test(s) && !/\bpas fait\b/.test(s)) {
+      const until = findDate(s, today);
+      const inclusive = !/\bjusqu'(a|au)\b/.test(s) || /\b(inclus|compris)\b/.test(s);
+      let dates = [];
+      if (until) {
+        let d = new Date(today); const end = until;
+        if (/\bjusqu'(a|au)\b/.test(s)) { while (ymd(d) < end) { dates.push(ymd(d)); d.setDate(d.getDate() + 1); } if (inclusive) dates.push(end); }
+        else dates = [end];
+      } else dates = [ymd(today)];
+      if (!dates.length) dates = [ymd(today)];
+      const lab = dates.length === 1 ? nice(dates[0]) : (dates[0] === ymd(today) ? "d'aujourd'hui" : 'du ' + nice(dates[0])) + ' au ' + nice(dates[dates.length - 1]);
+      return { action: 'off', dates, summary: 'Rien de prévu ' + lab + ' : tout en temps libre' };
+    }
     if (/^(c'est )?(fait|fini|termine|ok|done|bon)\b/.test(s) || /\bj'ai (fait|fini|termine)\b/.test(s))
       return { action: 'done', target: proj, summary: 'Marquer ' + (proj ? proj.name : 'le bloc en cours') + ' comme fait' };
     if (/\b(pas fait|pas eu le temps|pas pu|j'ai saute|j'ai rate|saute|zappe)\b/.test(s))
@@ -262,14 +305,23 @@
       const title = cleanTitle(s) || 'Imprévu';
       return { action: 'extra', date, s: sMs, e: eMs, title, summary: title + ' ' + dlabel + ' ' + fmt(sMin == null ? Math.round((sMs - base) / MIN) : sMin) + ' → ' + fmt(eMin) };
     }
-    // nouvelle tâche avec durée
+    // nouvelle tâche : "révision marketing 3h avant vendredi" (échéance) ou "samedi révisions 4h" (à faire ce jour-là)
+    const isDeadline = /\b(avant|pour le|d'ici|jusqu)\b/.test(s);
+    const dateIn = findDate(s, today);
+    const taskWords = /\b(revision|revisions|reviser|bosser|travailler|rendu|devoir|devoirs|dossier|expose|memoire|rapport|projet|preparer|lire|ecrire|rediger)\b/.test(s);
     if (dur != null) {
-      const deadline = findDate(s, today);
       const title = cleanTitle(s) || 'Tâche';
-      return { action: 'task', title, minutes: dur, deadline, summary: title + ' : ' + dur + ' min' + (deadline ? ' avant ' + nice(deadline) : ' (réparti sur 3 jours)') };
+      if (dateIn && !isDeadline) { const dl = ymd(addDays(new Date(dateIn + 'T12:00:00'), 1)); return { action: 'task', title, minutes: dur, deadline: dl, from: dateIn, summary: title + ' : ' + dur + ' min ' + nice(dateIn) }; }
+      return { action: 'task', title, minutes: dur, deadline: isDeadline ? dateIn : null, summary: title + ' : ' + dur + ' min' + (isDeadline && dateIn ? ' avant ' + nice(dateIn) : ' (réparti sur 3 jours)') };
+    }
+    // tâche sans durée ("samedi beaucoup de révisions") → on demande combien
+    if (taskWords) {
+      const title = cleanTitle(s.replace(/\b(beaucoup|pas mal|plein|enormement|un peu|un max|de temps|du temps|en plus|mes projets|de mes projets|donc|faut|il faut|mettre)\b/g, ' ')) || 'Tâche';
+      const from = dateIn && !isDeadline ? dateIn : null; const deadline = isDeadline ? dateIn : (from ? ymd(addDays(new Date(from + 'T12:00:00'), 1)) : null);
+      return { action: 'need', field: 'minutes', task: { title, from, deadline, fromLabel: from ? nice(from) : '', deadlineLabel: deadline ? nice(deadline) : '' }, summary: title + (from ? ' ' + nice(from) : '') + ' : combien de temps ? Réponds par exemple « 4h ».' };
     }
     return { action: 'unknown', summary: 'Pas compris. Exemples : « dentiste demain de 14h à 16h », « pas fait poker », « révision marketing 3h avant vendredi », « coucher 1h ».' };
   }
 
-  global.Planner = { planDay, planWeek, parse, dayWindow, norm, ymd, addDays, hm, pad, MIN };
+  global.Planner = { planDay, planWeek, parse, parseAll, findDuration: s => findDuration(norm(s)), dayWindow, norm, ymd, addDays, hm, pad, MIN };
 })(typeof module !== 'undefined' ? module.exports : window);
