@@ -95,9 +95,10 @@
     // trajet après (et éventuellement avant) les événements de l'emploi du temps, sauf s'ils s'enchaînent
     const cal = fixed.filter(f => f.kind === 'fixed').sort((a, b) => a.s - b.s);
     const tAfter = (cfg.travelAfter == null ? 30 : cfg.travelAfter) * MIN, tBefore = (cfg.travelBefore || 0) * MIN;
-    for (const ev of cal) {
-      if (tAfter && !cal.some(o => o !== ev && o.s >= ev.s && o.s < ev.e + tAfter + MIN)) fixed.push({ s: ev.e, e: ev.e + tAfter, title: 'Trajet', kind: 'trajet' });
-      if (tBefore && !cal.some(o => o !== ev && o.e > ev.s - tBefore - MIN && o.e <= ev.s)) fixed.push({ s: ev.s - tBefore, e: ev.s, title: 'Trajet', kind: 'trajet' });
+    if (cal.length) {
+      const last = Math.max.apply(null, cal.map(x => x.e)), first = cal[0].s;
+      if (tAfter) fixed.push({ s: last, e: last + tAfter, title: 'Trajet', kind: 'trajet' });
+      if (tBefore) fixed.push({ s: first - tBefore, e: first, title: 'Trajet', kind: 'trajet' });
     }
     for (const r of (cfg.routines || [])) {
       if (r.off) continue;
@@ -111,6 +112,12 @@
     if (ctx.now > from) from = round5(ctx.now);
     const slots = subtract([{ s: from, e: w.end }], fixed);
     const total = slots.reduce((a, x) => a + (x.e - x.s), 0) / MIN;
+    let campus = [], outside = slots;
+    if (cal.length) {
+      const cs = cal[0].s, ce = Math.max.apply(null, cal.map(x => x.e));
+      splitAt(slots, cs); splitAt(slots, ce);
+      campus = slots.filter(sl => sl.s >= cs && sl.e <= ce); outside = slots.filter(sl => !(sl.s >= cs && sl.e <= ce));
+    }
     const blocks = [];
     const skip = new Set(ov.skip || []);
     if (ov.off) { // journée sans rien : tout le temps devient libre
@@ -136,7 +143,8 @@
       let need = Math.min(rem, Math.ceil(rem / daysLeft / 30) * 30);
       if (!urgent) need = Math.min(need, Math.max(0, Math.floor(taskBudget / 5) * 5));
       if (need <= 0) continue;
-      const got = take(slots, blocks, need, { title: t.name, kind: 'task', ref: t.id, color: t.color }, { minBlock: 30, maxChunk: 120, preferWhole: true, notBefore: nbt(null) });
+      let got = take(campus, blocks, need, { title: t.name, kind: 'task', ref: t.id, color: t.color }, { minBlock: 30, maxChunk: 120, preferWhole: true });
+      got += take(outside, blocks, need - got, { title: t.name, kind: 'task', ref: t.id, color: t.color }, { minBlock: 30, maxChunk: 120, preferWhole: true, notBefore: nbt(null) });
       ctx.planned[t.id] = (ctx.planned[t.id] || 0) + got;
       taskBudget -= got;
     }
@@ -150,17 +158,23 @@
     if (libre) {
       let want = ov.libre != null ? ov.libre : libre.min;
       if (total < 180) want = Math.min(want, 60); // journée courte : le libre rétrécit
-      take(slots, blocks, want, { title: libre.name, kind: 'libre', ref: libre.id, color: libre.color }, { reverse: true, minBlock: 30, maxChunk: 240 });
+      take(outside, blocks, want, { title: libre.name, kind: 'libre', ref: libre.id, color: libre.color }, { reverse: true, minBlock: 30, maxChunk: 240 });
     }
     const nb = p => nbt(p.notBefore ? base + hm(p.notBefore) * MIN : null);
     for (const p of dailies) {
-      take(slots, blocks, ov[p.id] != null ? ov[p.id] : p.min, { title: p.name, kind: 'project', ref: p.id, color: p.color }, { minBlock: 30, maxChunk: p.max || p.min, preferWhole: true, single: true, notBefore: nb(p) });
+      take(outside, blocks, ov[p.id] != null ? ov[p.id] : p.min, { title: p.name, kind: 'project', ref: p.id, color: p.color }, { minBlock: 30, maxChunk: p.max || p.min, preferWhole: true, single: true, notBefore: nb(p) });
     }
     for (const p of fills) {
-      take(slots, blocks, ov[p.id] != null ? ov[p.id] : (p.max || 300), { title: p.name, kind: 'project', ref: p.id, color: p.color }, { minBlock: p.minBlock || 45, maxChunk: p.chunk || 120, notBefore: nb(p) });
+      const want = ov[p.id] != null ? ov[p.id] : (p.max || 300);
+      let got = take(campus, blocks, want, { title: p.name, kind: 'project', ref: p.id, color: p.color }, { minBlock: 15, maxChunk: p.chunk || 120 });
+      take(outside, blocks, want - got, { title: p.name, kind: 'project', ref: p.id, color: p.color }, { minBlock: p.minBlock || 45, maxChunk: p.chunk || 120, notBefore: nb(p) });
     }
-    // 3. restes → libre
-    for (const sl of slots) {
+    // 3. restes : entre les cours → premier projet de remplissage ; ailleurs → libre
+    for (const sl of campus) {
+      const len = (sl.e - sl.s) / MIN; const p = fills[0];
+      if (len >= 15 && p) { blocks.push({ s: sl.s, e: sl.e, title: p.name, kind: 'project', ref: p.id, color: p.color }); sl.s = sl.e; }
+    }
+    for (const sl of outside) {
       const len = (sl.e - sl.s) / MIN;
       if (len >= 30 && libre) { blocks.push({ s: sl.s, e: sl.e, title: libre.name, kind: 'libre', ref: libre.id, color: libre.color }); sl.s = sl.e; }
     }
