@@ -173,7 +173,7 @@ const LS = k => { try { return JSON.parse(localStorage.getItem('jour.' + k)); } 
 const SV = (k, v) => { try { localStorage.setItem('jour.' + k, JSON.stringify(v)); } catch (e) { } };
 const uid = () => Math.random().toString(36).slice(2, 9);
 const DEFAULT_CFG = {
-  wake: '08:00', bed: '00:00', windDown: 30, travelAfter: 30, travelBefore: 0,
+  wake: '08:00', bed: '00:00', windDown: 30, travelAfter: 30, travelBefore: 0, workFrom: '10:30',
   routines: [{ name: 'Dîner', start: '19:30', dur: 45 }],
   projects: [
     { id: 'libre', name: 'Libre', kind: 'libre', min: 90, color: '#8E8E93', gcolor: '8' },
@@ -192,6 +192,7 @@ if (!cfg.mig2) { // migration : plus de déjeuner, trajet après les cours, poke
   const pk = (cfg.projects || []).find(p => p.id === 'poker'); if (pk && !pk.notBefore) pk.notBefore = '18:00';
   cfg.mig2 = true; try { localStorage.setItem('jour.cfg', JSON.stringify(cfg)); } catch (e) { }
 }
+if (!cfg.mig3) { if (!cfg.workFrom) cfg.workFrom = '10:30'; cfg.mig3 = true; try { localStorage.setItem('jour.cfg', JSON.stringify(cfg)); } catch (e) { } }
 let tasks = LS('tasks') || [];
 let extras = LS('extras') || [];
 let overrides = LS('overrides') || {};
@@ -393,9 +394,9 @@ function renderSettings() {
     '<div class="hd">Compte</div><div class="grp">' + row('Google Agenda', gstate, 'openPage(\'google\')') + '</div>' +
     (tokenOk() && !g.planCal ? '<div class="ft" style="color:var(--orange)">Aucun agenda « Planning » choisi : les blocs ne sont pas envoyés sur ton téléphone.</div>' : '') +
     '<div class="hd">Journée</div><div class="grp">' +
-    timeRow('Lever', cfg.wake, 'cfg.wake=this.value;saveAll()') + timeRow('Coucher', cfg.bed, 'cfg.bed=this.value;saveAll()') +
+    timeRow('Lever', cfg.wake, 'cfg.wake=this.value;saveAll()') + timeRow('Début du travail', cfg.workFrom || '', 'cfg.workFrom=this.value||null;saveAll()') + timeRow('Coucher', cfg.bed, 'cfg.bed=this.value;saveAll()') +
     numRow('Calme avant le coucher', cfg.windDown, 'cfg.windDown=+this.value;saveAll()', 'min') + '</div>' +
-    '<div class="ft">Le coucher est fixe. Pour le décaler un soir, dicte « coucher 1h ».</div>' +
+    '<div class="ft">Aucun projet ni tâche n\'est placé avant le début du travail : le matin reste libre. Le coucher est fixe ; pour le décaler un soir, dicte « coucher 1h ».</div>' +
     '<div class="hd">Trajets</div><div class="grp">' + numRow('Après les cours', cfg.travelAfter == null ? 30 : cfg.travelAfter, 'cfg.travelAfter=+this.value;saveAll()', 'min') + numRow('Avant les cours', cfg.travelBefore || 0, 'cfg.travelBefore=+this.value;saveAll()', 'min') + '</div>' +
     '<div class="ft">Bloqué automatiquement autour des événements de ton emploi du temps, sauf quand deux cours s\'enchaînent.</div>' +
     '<div class="hd">Routines</div><div class="grp">' + cfg.routines.map((r, i) => row(esc(r.name), r.start + ' · ' + r.dur + ' min', 'openPage(\'routine\',' + i + ')', { sub: r.off ? 'Désactivée' : '' })).join('') +

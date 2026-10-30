@@ -119,6 +119,10 @@
       return { date: dateStr, window: w, fixed: fixed.sort((a, b) => a.s - b.s), blocks: mergeBlocks(blocks), total, off: true };
     }
 
+    // rien de planifié avant l'heure de début du travail (le matin reste libre)
+    const workStart = cfg.workFrom ? base + hm(cfg.workFrom) * MIN : null;
+    const nbt = t => workStart == null ? t : (t == null ? workStart : Math.max(t, workStart));
+
     // 1. tâches à deadline (et tâches à faire à partir d'un jour donné)
     const tasks = (ctx.tasks || []).filter(t => !t.done && remaining(t, ctx) > 0 && !(t.from && dateStr < t.from));
     tasks.sort((a, b) => (a.deadline || '9999') < (b.deadline || '9999') ? -1 : 1);
@@ -132,7 +136,7 @@
       let need = Math.min(rem, Math.ceil(rem / daysLeft / 30) * 30);
       if (!urgent) need = Math.min(need, Math.max(0, Math.floor(taskBudget / 5) * 5));
       if (need <= 0) continue;
-      const got = take(slots, blocks, need, { title: t.name, kind: 'task', ref: t.id, color: t.color }, { minBlock: 30, maxChunk: 120, preferWhole: true });
+      const got = take(slots, blocks, need, { title: t.name, kind: 'task', ref: t.id, color: t.color }, { minBlock: 30, maxChunk: 120, preferWhole: true, notBefore: nbt(null) });
       ctx.planned[t.id] = (ctx.planned[t.id] || 0) + got;
       taskBudget -= got;
     }
@@ -148,7 +152,7 @@
       if (total < 180) want = Math.min(want, 60); // journée courte : le libre rétrécit
       take(slots, blocks, want, { title: libre.name, kind: 'libre', ref: libre.id, color: libre.color }, { reverse: true, minBlock: 30, maxChunk: 240 });
     }
-    const nb = p => p.notBefore ? base + hm(p.notBefore) * MIN : null;
+    const nb = p => nbt(p.notBefore ? base + hm(p.notBefore) * MIN : null);
     for (const p of dailies) {
       take(slots, blocks, ov[p.id] != null ? ov[p.id] : p.min, { title: p.name, kind: 'project', ref: p.id, color: p.color }, { minBlock: 30, maxChunk: p.max || p.min, preferWhole: true, single: true, notBefore: nb(p) });
     }
