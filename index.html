@@ -16,12 +16,12 @@
 /* Système iOS : fond groupé, listes blanches, séparateurs fins, accent bleu. Aucune animation. */
 :root{
   --bg:#F2F2F7;--group:#FFFFFF;--sep:rgba(60,60,67,.29);--label:#000;--sec:rgba(60,60,67,.6);--ter:rgba(60,60,67,.3);
-  --blue:#007AFF;--green:#34C759;--red:#FF3B30;--orange:#FF9500;--gray:#8E8E93;--fill:rgba(120,120,128,.12);--fill2:rgba(120,120,128,.2);
+  --blue:#007AFF;--green:#34C759;--red:#FF3B30;--orange:#FF9500;--gray:#8E8E93;--cal:#5E5CE6;--imp:#32ADE6;--fill:rgba(120,120,128,.12);--fill2:rgba(120,120,128,.2);
   --bar:rgba(249,249,249,.94);
 }
 @media (prefers-color-scheme: dark){:root{
   --bg:#000;--group:#1C1C1E;--sep:rgba(84,84,88,.65);--label:#fff;--sec:rgba(235,235,245,.6);--ter:rgba(235,235,245,.3);
-  --blue:#0A84FF;--green:#30D158;--red:#FF453A;--orange:#FF9F0A;--gray:#8E8E93;--fill:rgba(120,120,128,.24);--fill2:rgba(120,120,128,.32);
+  --blue:#0A84FF;--green:#30D158;--red:#FF453A;--orange:#FF9F0A;--gray:#8E8E93;--cal:#7D7AFF;--imp:#64D2FF;--fill:rgba(120,120,128,.24);--fill2:rgba(120,120,128,.32);
   --bar:rgba(29,29,31,.94);
 }}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
@@ -85,6 +85,10 @@ body{position:relative}
 .ev .bd .n{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ev .bd .s{font-size:15px;color:var(--sec)}
 .ev.fx .bd .n{font-weight:400;color:var(--sec)}
+.ev.cal .bd .n{font-weight:600;color:var(--label)}
+.ev.cal .bar{background:var(--cal)}
+.ev.imp .bar{background:var(--imp)}
+.ev.imp .bd .n{font-weight:600;color:var(--label)}
 .ev .st{flex:none;align-self:center;font-size:15px;font-weight:500}
 .st.done{color:var(--green)}.st.skip{color:var(--red)}.st.ask{color:var(--orange)}.st.cur{color:var(--blue)}
 .now{display:flex;align-items:center;height:1px;background:var(--red);margin:0 0 0 72px;position:relative}
@@ -245,7 +249,7 @@ function renderDay() {
   for (const it of items) {
     if (!nowDone && isToday && it.s > now && now >= day.window.start) { html += '<div class="now"></div>'; nowDone = true; }
     const tm = '<div class="tm tnum"><b>' + fmt(it.s) + '</b>' + fmt(it.e) + '</div>';
-    if (it.fixed) { html += '<div class="ev fx">' + tm + '<div class="bar"></div><div class="bd"><div class="n">' + esc(it.title) + '</div><div class="s">' + ({ fixed: 'Agenda', routine: 'Routine', imprevu: 'Imprévu' }[it.kind]) + ' · ' + dur(it.s, it.e) + '</div></div></div>'; continue; }
+    if (it.fixed) { html += '<div class="ev fx' + (it.kind === 'fixed' ? ' cal' : it.kind === 'imprevu' ? ' imp' : '') + '">' + tm + '<div class="bar"></div><div class="bd"><div class="n">' + esc(it.title) + '</div><div class="s">' + ({ fixed: 'Emploi du temps · fixe', routine: 'Routine', imprevu: 'Imprévu' }[it.kind]) + ' · ' + dur(it.s, it.e) + '</div></div></div>'; continue; }
     const k = bkey(it), st = status[k], cur = now >= it.s && now < it.e;
     const stHtml = st === 'done' ? '<span class="st done">Fait</span>' : st === 'skip' ? '<span class="st skip">Sauté</span>' : (it.e <= now ? '<span class="st ask">À renseigner</span>' : (cur ? '<span class="st cur">En cours</span>' : ''));
     const color = it.color || (proj(it.ref) || {}).color || (it.kind === 'task' ? 'var(--red)' : 'var(--blue)');
