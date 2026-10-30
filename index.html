@@ -173,11 +173,11 @@ const LS = k => { try { return JSON.parse(localStorage.getItem('jour.' + k)); } 
 const SV = (k, v) => { try { localStorage.setItem('jour.' + k, JSON.stringify(v)); } catch (e) { } };
 const uid = () => Math.random().toString(36).slice(2, 9);
 const DEFAULT_CFG = {
-  wake: '08:00', bed: '00:00', windDown: 30,
-  routines: [{ name: 'Déjeuner', start: '12:30', dur: 45 }, { name: 'Dîner', start: '19:30', dur: 45 }],
+  wake: '08:00', bed: '00:00', windDown: 30, travelAfter: 30, travelBefore: 0,
+  routines: [{ name: 'Dîner', start: '19:30', dur: 45 }],
   projects: [
     { id: 'libre', name: 'Libre', kind: 'libre', min: 90, color: '#8E8E93', gcolor: '8' },
-    { id: 'poker', name: 'Poker', kind: 'daily', min: 60, max: 60, color: '#FF9500', gcolor: '5' },
+    { id: 'poker', name: 'Poker', kind: 'daily', min: 60, max: 60, color: '#FF9500', gcolor: '5', notBefore: '18:00' },
     { id: 'geomind', name: 'GeoMind', kind: 'fill', max: 300, chunk: 120, minBlock: 45, color: '#007AFF', gcolor: '9' },
     { id: 'sport', name: 'Sport', kind: 'daily', min: 45, max: 45, color: '#34C759', gcolor: '10', off: true },
   ],
@@ -186,6 +186,12 @@ const DEFAULT_CFG = {
 let cfg = Object.assign({}, DEFAULT_CFG, LS('cfg') || {});
 if (!cfg.google.clientId) cfg.google.clientId = DEFAULT_CFG.google.clientId;
 if (!cfg.google.authUrl) cfg.google.authUrl = DEFAULT_CFG.google.authUrl;
+if (!cfg.mig2) { // migration : plus de déjeuner, trajet après les cours, poker le soir
+  cfg.routines = (cfg.routines || []).filter(r => r.name !== 'Déjeuner');
+  if (cfg.travelAfter == null) cfg.travelAfter = 30;
+  const pk = (cfg.projects || []).find(p => p.id === 'poker'); if (pk && !pk.notBefore) pk.notBefore = '18:00';
+  cfg.mig2 = true; try { localStorage.setItem('jour.cfg', JSON.stringify(cfg)); } catch (e) { }
+}
 let tasks = LS('tasks') || [];
 let extras = LS('extras') || [];
 let overrides = LS('overrides') || {};
@@ -249,7 +255,7 @@ function renderDay() {
   for (const it of items) {
     if (!nowDone && isToday && it.s > now && now >= day.window.start) { html += '<div class="now"></div>'; nowDone = true; }
     const tm = '<div class="tm tnum"><b>' + fmt(it.s) + '</b>' + fmt(it.e) + '</div>';
-    if (it.fixed) { html += '<div class="ev fx' + (it.kind === 'fixed' ? ' cal' : it.kind === 'imprevu' ? ' imp' : '') + '">' + tm + '<div class="bar"></div><div class="bd"><div class="n">' + esc(it.title) + '</div><div class="s">' + ({ fixed: 'Emploi du temps · fixe', routine: 'Routine', imprevu: 'Imprévu' }[it.kind]) + ' · ' + dur(it.s, it.e) + '</div></div></div>'; continue; }
+    if (it.fixed) { html += '<div class="ev fx' + (it.kind === 'fixed' ? ' cal' : it.kind === 'imprevu' ? ' imp' : '') + '">' + tm + '<div class="bar"></div><div class="bd"><div class="n">' + esc(it.title) + '</div><div class="s">' + ({ fixed: 'Emploi du temps · fixe', routine: 'Routine', imprevu: 'Imprévu', trajet: 'Retour / trajet' }[it.kind]) + ' · ' + dur(it.s, it.e) + '</div></div></div>'; continue; }
     const k = bkey(it), st = status[k], cur = now >= it.s && now < it.e;
     const stHtml = st === 'done' ? '<span class="st done">Fait</span>' : st === 'skip' ? '<span class="st skip">Sauté</span>' : (it.e <= now ? '<span class="st ask">À renseigner</span>' : (cur ? '<span class="st cur">En cours</span>' : ''));
     const color = it.color || (proj(it.ref) || {}).color || (it.kind === 'task' ? 'var(--red)' : 'var(--blue)');
@@ -390,6 +396,8 @@ function renderSettings() {
     timeRow('Lever', cfg.wake, 'cfg.wake=this.value;saveAll()') + timeRow('Coucher', cfg.bed, 'cfg.bed=this.value;saveAll()') +
     numRow('Calme avant le coucher', cfg.windDown, 'cfg.windDown=+this.value;saveAll()', 'min') + '</div>' +
     '<div class="ft">Le coucher est fixe. Pour le décaler un soir, dicte « coucher 1h ».</div>' +
+    '<div class="hd">Trajets</div><div class="grp">' + numRow('Après les cours', cfg.travelAfter == null ? 30 : cfg.travelAfter, 'cfg.travelAfter=+this.value;saveAll()', 'min') + numRow('Avant les cours', cfg.travelBefore || 0, 'cfg.travelBefore=+this.value;saveAll()', 'min') + '</div>' +
+    '<div class="ft">Bloqué automatiquement autour des événements de ton emploi du temps, sauf quand deux cours s\'enchaînent.</div>' +
     '<div class="hd">Routines</div><div class="grp">' + cfg.routines.map((r, i) => row(esc(r.name), r.start + ' · ' + r.dur + ' min', 'openPage(\'routine\',' + i + ')', { sub: r.off ? 'Désactivée' : '' })).join('') +
     '<button class="row act l" onclick="cfg.routines.push({name:\'Nouvelle routine\',start:\'18:00\',dur:30});saveAll();openPage(\'routine\',cfg.routines.length-1)">Ajouter une routine</button></div>' +
     '<div class="hd">Projets</div><div class="grp">' + cfg.projects.map((p, i) => row(esc(p.name), p.off ? 'Désactivé' : (p.kind === 'fill' ? 'jusqu\'à ' + dur(0, (p.max || 300) * MIN) + ' / jour' : dur(0, (p.min || 0) * MIN) + ' / jour'), 'openPage(\'projet\',' + i + ')', { dot: p.color || 'var(--blue)', ins: true })).join('') +
@@ -440,7 +448,8 @@ function openPage(kind, i) {
     const kindRows = Object.keys(KINDS).map(k => '<button class="row" onclick="cfg.projects[' + i + '].kind=\'' + k + '\';saveAll();openPage(\'projet\',' + i + ')"><span class="chk">' + (p.kind === k ? '✓' : '') + '</span><div class="lab">' + KINDS[k] + '<span class="s">' + { libre: 'Placé en fin de journée. Rétrécit si la journée est courte.', daily: 'Une durée fixe chaque jour.', fill: 'Prend tout le temps restant, par blocs.' }[k] + '</span></div></button>').join('');
     const colors = ['#007AFF', '#FF9500', '#34C759', '#FF3B30', '#AF52DE', '#FF2D55', '#5AC8FA', '#8E8E93'];
     html = '<div class="hd"></div><div class="grp">' + textRow('Nom', p.name, 'cfg.projects[' + i + '].name=this.value;saveAll();document.getElementById(\'pgt\').textContent=this.value') +
-      swRow('Actif', !p.off, 'cfg.projects[' + i + '].off=!cfg.projects[' + i + '].off;saveAll();openPage(\'projet\',' + i + ')') + '</div>' +
+      swRow('Actif', !p.off, 'cfg.projects[' + i + '].off=!cfg.projects[' + i + '].off;saveAll();openPage(\'projet\',' + i + ')') +
+      (p.kind !== 'libre' ? '<div class="row"><div class="lab">Pas avant<span class="s">' + (p.notBefore ? 'Placé uniquement à partir de ' + p.notBefore : 'À n\'importe quelle heure') + '</span></div><input type="time" value="' + (p.notBefore || '') + '" onchange="cfg.projects[' + i + '].notBefore=this.value||null;saveAll()"></div>' : '') + '</div>' +
       '<div class="hd">Type</div><div class="grp">' + kindRows + '</div>' +
       '<div class="hd">Durée</div><div class="grp">' +
       (p.kind === 'fill' ? numRow('Maximum par jour', p.max || 300, 'cfg.projects[' + i + '].max=+this.value;saveAll()', 'min') + numRow('Taille d\'un bloc', p.chunk || 120, 'cfg.projects[' + i + '].chunk=+this.value;saveAll()', 'min') + numRow('Bloc minimum', p.minBlock || 45, 'cfg.projects[' + i + '].minBlock=+this.value;saveAll()', 'min')

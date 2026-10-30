@@ -33,8 +33,13 @@
     return out.filter(x => x.e - x.s >= 15 * MIN);
   }
 
+  // Coupe les créneaux à l'instant t (pour pouvoir n'en utiliser qu'une partie)
+  function splitAt(slots, t) {
+    for (let i = 0; i < slots.length; i++) { const sl = slots[i]; if (sl.s < t && sl.e > t) { slots.splice(i + 1, 0, { s: t, e: sl.e }); sl.e = t; i++; } }
+  }
   // Prend `need` minutes dans les créneaux libres (mutés). Retourne les minutes prises.
   function take(slots, blocks, need, meta, opts) {
+    if (opts.notBefore != null) { splitAt(slots, opts.notBefore); slots = slots.filter(sl => sl.s >= opts.notBefore); }
     const minBlock = opts.minBlock || 30, maxChunk = opts.maxChunk || 120;
     let got = 0;
     let order = opts.reverse ? slots.slice().reverse() : slots.slice();
@@ -87,6 +92,13 @@
     for (const ev of ctx.events) {
       if (ev.e > w.start && ev.s < w.end + 30 * MIN) fixed.push({ s: ev.s, e: ev.e, title: ev.title, kind: 'fixed' });
     }
+    // trajet après (et éventuellement avant) les événements de l'emploi du temps, sauf s'ils s'enchaînent
+    const cal = fixed.filter(f => f.kind === 'fixed').sort((a, b) => a.s - b.s);
+    const tAfter = (cfg.travelAfter == null ? 30 : cfg.travelAfter) * MIN, tBefore = (cfg.travelBefore || 0) * MIN;
+    for (const ev of cal) {
+      if (tAfter && !cal.some(o => o !== ev && o.s >= ev.s && o.s < ev.e + tAfter + MIN)) fixed.push({ s: ev.e, e: ev.e + tAfter, title: 'Trajet', kind: 'trajet' });
+      if (tBefore && !cal.some(o => o !== ev && o.e > ev.s - tBefore - MIN && o.e <= ev.s)) fixed.push({ s: ev.s - tBefore, e: ev.s, title: 'Trajet', kind: 'trajet' });
+    }
     for (const r of (cfg.routines || [])) {
       if (r.off) continue;
       const s = base + hm(r.start) * MIN;
@@ -136,11 +148,12 @@
       if (total < 180) want = Math.min(want, 60); // journée courte : le libre rétrécit
       take(slots, blocks, want, { title: libre.name, kind: 'libre', ref: libre.id, color: libre.color }, { reverse: true, minBlock: 30, maxChunk: 240 });
     }
+    const nb = p => p.notBefore ? base + hm(p.notBefore) * MIN : null;
     for (const p of dailies) {
-      take(slots, blocks, ov[p.id] != null ? ov[p.id] : p.min, { title: p.name, kind: 'project', ref: p.id, color: p.color }, { minBlock: 30, maxChunk: p.max || p.min, preferWhole: true, single: true });
+      take(slots, blocks, ov[p.id] != null ? ov[p.id] : p.min, { title: p.name, kind: 'project', ref: p.id, color: p.color }, { minBlock: 30, maxChunk: p.max || p.min, preferWhole: true, single: true, notBefore: nb(p) });
     }
     for (const p of fills) {
-      take(slots, blocks, ov[p.id] != null ? ov[p.id] : (p.max || 300), { title: p.name, kind: 'project', ref: p.id, color: p.color }, { minBlock: p.minBlock || 45, maxChunk: p.chunk || 120 });
+      take(slots, blocks, ov[p.id] != null ? ov[p.id] : (p.max || 300), { title: p.name, kind: 'project', ref: p.id, color: p.color }, { minBlock: p.minBlock || 45, maxChunk: p.chunk || 120, notBefore: nb(p) });
     }
     // 3. restes → libre
     for (const sl of slots) {
